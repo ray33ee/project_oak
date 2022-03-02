@@ -32,6 +32,7 @@ pub enum Step {
     Print { message: String },
     //Input,
     //String,
+    Panic,
 }
 
 impl Step {
@@ -46,30 +47,37 @@ impl Step {
     ) -> Result<Option<Step>> {
 
         match &self {
+            Step::Panic => {
+                Err(Error::Custom)
+            }
             Step::File { name, destination } => {
-                install_archive.extract(&name, &destination);
+                install_archive.extract(&name, &destination)?;
 
                 Ok(Some(Step::Delete { path: destination.clone() }))
             }
             Step::Move { source, destination } => {
 
-
-                if source.is_dir() {
-                    let mut options = fs_extra::dir::CopyOptions::default();
-                    options.content_only = true;
-
-                    fs_extra::dir::move_dir(&source, &destination, &options).unwrap();
-
-                } else if source.is_file() {
-                    let options = fs_extra::file::CopyOptions::default();
-
-                    fs_extra::file::move_file(&source, &destination, &options).unwrap();
-
+                if destination.exists() {
+                    Err(crate::Error::AlreadyExists)
                 } else {
-                    panic!("File is not a path or file");
+                    if source.is_dir() {
+                        let mut options = fs_extra::dir::CopyOptions::default();
+                        options.content_only = true;
+
+                        fs_extra::dir::move_dir(&source, &destination, &options)?;
+
+                    } else if source.is_file() {
+                        let options = fs_extra::file::CopyOptions::default();
+
+                        fs_extra::file::move_file(&source, &destination, &options)?;
+
+                    } else {
+                        panic!("File is not a path or file");
+                    }
+
+                    Ok(Some(Step::Move { source: destination.clone(), destination: source.clone() }))
                 }
 
-                Ok(Some(Step::Move { source: destination.clone(), destination: source.clone() }))
             }
             Step::Delete { path } => {
 
@@ -78,9 +86,9 @@ impl Step {
                 }
 
                 if path.is_dir() {
-                    std::fs::remove_dir_all(&path).unwrap();
+                    std::fs::remove_dir_all(&path)?;
                 } else if path.is_file() {
-                    std::fs::remove_file(&path).unwrap();
+                    std::fs::remove_file(&path)?;
                 } else {
                     panic!("File is not a path or file");
                 }
@@ -95,12 +103,12 @@ impl Step {
             Step::Create { path, f_type } => {
                 match f_type {
                     FileType::File => {
-                        OpenOptions::new().create_new(true).write(true).open(&path).unwrap();
+                        OpenOptions::new().create_new(true).write(true).open(&path)?;
 
                         Ok(Some(Step::Delete { path: path.clone() }))
                     }
                     FileType::Folder => {
-                        std::fs::create_dir(path).unwrap();
+                        std::fs::create_dir(path)?;
 
                         Ok(Some(Step::Delete { path: path.clone() }))
                     }
@@ -108,22 +116,26 @@ impl Step {
             }
             Step::Copy { source, destination } => {
 
-                if source.is_file() {
-
-                    std::fs::copy(&source, &destination).unwrap();
-                } else if source.is_dir() {
-                    let mut options = fs_extra::dir::CopyOptions::default();
-                    options.content_only = true;
-
-                    fs_extra::dir::copy(&source, &destination, &options).unwrap();
+                if destination.exists() {
+                    Err(crate::error::Error::AlreadyExists)
                 } else {
-                    panic!("Source is not a file or directory");
-                }
+                    if source.is_file() {
 
-                Ok(Some(Step::Delete { path: destination.clone() }))
+                        std::fs::copy(&source, &destination)?;
+                    } else if source.is_dir() {
+                        let mut options = fs_extra::dir::CopyOptions::default();
+                        options.content_only = true;
+
+                        fs_extra::dir::copy(&source, &destination, &options)?;
+                    } else {
+                        panic!("Source is not a file or directory");
+                    }
+
+                    Ok(Some(Step::Delete { path: destination.clone() }))
+                }
             }
             Step::Rename { from, to } => {
-                std::fs::rename(&from, &to).unwrap();
+                std::fs::rename(&from, &to)?;
 
                 Ok(Some(Step::Rename {from: to.clone(), to: from.clone()}))
             }

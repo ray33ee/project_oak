@@ -4,7 +4,7 @@
 
 An installation is described by a set of commands. These commands are executed out of order and concurrently.
 A command can be a single step, or a list of steps, executed in order. Each step has an inverse. Inverses can be
-user defined or default. Each command also has an inverse, that is either user defined, infered, or implemented as the inverses
+user defined or default. Each command also has an inverse, that is either user defined, inferred, or implemented as the inverses
 of the list of steps in the reverse order.
 
 ## Script

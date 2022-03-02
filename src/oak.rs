@@ -6,37 +6,46 @@ use std::fs::OpenOptions;
 use crate::command::Command;
 use std::borrow::BorrowMut;
 use zip::write::FileOptions;
+use crate::error::{Result};
 
+///A struct used to read an oak archive
 pub struct OakRead {
     archive: ZipArchive<std::fs::File>,
 }
 
 impl OakRead {
 
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        Self {
-            archive: ZipArchive::new(OpenOptions::new().read(true).open(path).unwrap()).unwrap(),
-        }
+    ///Create a new reader from an existing oak archive
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+        Ok(Self {
+            archive: ZipArchive::new(OpenOptions::new().read(true).open(path).unwrap())?,
+        })
     }
 
-    pub fn commands(& mut self) -> Vec<Command> {
+    ///Get the list of commands stored in the archive
+    pub fn commands(& mut self) -> Result<Vec<Command>> {
         //bincode::deserialize_from(self.archive.by_name("_command").unwrap()).unwrap()
-        serde_json::from_reader(self.archive.by_name("_command").unwrap()).unwrap()
+        Ok(serde_json::from_reader(self.archive.by_name("_commands")?)?)
     }
 
-    pub fn extract<P: AsRef<Path>>(& mut self, name: &str, destination: P) {
-        let mut afile = self.archive.by_name(name).unwrap();
-        let mut dfile = OpenOptions::new().write(true).create(true).open(destination).unwrap();
-        std::io::copy(& mut afile, & mut dfile).unwrap();
+    ///Extract the specified file `name` to `destination`
+    pub fn extract<P: AsRef<Path>>(& mut self, name: &str, destination: P) -> Result<()> {
+        let mut afile = self.archive.by_name(name)?;
+        let mut dfile = OpenOptions::new().write(true).create(true).open(destination)?;
+        std::io::copy(& mut afile, & mut dfile)?;
+
+        Ok(())
     }
 }
 
+///A struct used to write to an oak archive
 pub struct OakWrite {
     archive: ZipWriter<std::fs::File>,
     count: u32,
 }
 
 impl OakWrite {
+    ///Create a new oak archive and return an `OakWrite` object
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
             archive: ZipWriter::new(OpenOptions::new().create_new(true).write(true).open(path.as_ref()).unwrap()),
@@ -44,8 +53,12 @@ impl OakWrite {
         }
     }
 
+    ///Returns the current count
+    ///
+    /// Each write to the archive, the count variable is incremented. Used to uniquely name files in an oak archive
     pub fn count(&self) -> u32 { self.count }
 
+    ///Archive a file or folder into the archive
     pub fn archive<P: AsRef<Path>>(& mut self, path: P) {
 
         if path.as_ref().is_dir() {
@@ -54,7 +67,7 @@ impl OakWrite {
 
 
         } else if path.as_ref().is_file() {
-            self.archive.start_file(format!("_{}", self.count), FileOptions::default());
+            self.archive.start_file(format!("_{}", self.count), FileOptions::default()).unwrap();
             let mut file  = OpenOptions::new().read(true).open(path.as_ref()).unwrap();
             std::io::copy(& mut file, & mut self.archive).unwrap();
         } else {
@@ -65,14 +78,17 @@ impl OakWrite {
 
     }
 
+    ///Write the commands list to the archive
     pub fn commands(& mut self, commands: & Vec<Command>) {
         self.archive.start_file(format!("_commands"), FileOptions::default()).unwrap();
         //bincode::serialize_into(& mut self.archive, commands).unwrap();
         serde_json::to_writer(& mut self.archive, commands).unwrap()
     }
 
-    pub fn finish(& mut self) {
-        self.archive.finish();
+    ///Finish the archive. This is called on `drop`
+    pub fn finish(& mut self) -> Result<()> {
+        self.archive.finish()?;
+        Ok(())
     }
 
 }
