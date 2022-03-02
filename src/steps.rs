@@ -1,9 +1,6 @@
 
 use crate::error::{Result, Error};
 use std::path::{PathBuf};
-use crate::vm::VM;
-use zip::write::ZipWriter;
-use zip::read::ZipArchive;
 use std::fs::OpenOptions;
 use serde::{Serialize, Deserialize};
 use crate::oak::OakRead;
@@ -17,7 +14,7 @@ pub enum FileType {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Step {
-    File{ name: String, destination: PathBuf },
+    Data{ name: String, destination: PathBuf },
     Move{ source: PathBuf, destination: PathBuf },
     Delete { path: PathBuf },
     Create { path: PathBuf, f_type: FileType },
@@ -26,11 +23,11 @@ pub enum Step {
     //Environment,
     //Regedit,
     //Download { url: String, destination: PathBuf },
-    Execute { command: String, args: Vec<String> },
+    //Install - Installer path, plus a reg entry to check it installed correctly, locate the uninstaller,
+    //Uninstall - Uninstaller path, plus a reg entry to check it installed correctly,
     //Edit,
     //If,
     Print { message: String },
-    //Input,
     //String,
     Panic,
 }
@@ -50,7 +47,7 @@ impl Step {
             Step::Panic => {
                 Err(Error::Custom)
             }
-            Step::File { name, destination } => {
+            Step::Data { name, destination } => {
                 install_archive.extract(&name, &destination)?;
 
                 Ok(Some(Step::Delete { path: destination.clone() }))
@@ -85,16 +82,19 @@ impl Step {
                     archive.archive(&path);
                 }
 
-                if path.is_dir() {
+                let prefix = if path.is_dir() {
                     std::fs::remove_dir_all(&path)?;
+
+                    "d_"
                 } else if path.is_file() {
                     std::fs::remove_file(&path)?;
+                    ""
                 } else {
                     panic!("File is not a path or file");
-                }
+                };
 
                 if let Some(archive) = uninstall_archive {
-                    Ok(Some(Step::File { name: format!("_{}", archive.count()-1), destination: path.clone() }))
+                    Ok(Some(Step::Data { name: format!("_{}{}", prefix, archive.count()-1), destination: path.clone() }))
                 } else {
                     Ok(None)
                 }
@@ -138,14 +138,6 @@ impl Step {
                 std::fs::rename(&from, &to)?;
 
                 Ok(Some(Step::Rename {from: to.clone(), to: from.clone()}))
-            }
-            Step::Execute { command, args } => {
-                std::process::Command::new(command)
-                    .args(args)
-                    .output()
-                    .unwrap();
-
-                Ok(None)
             }
             Step::Print { message } => {
                 println!("{}", message);

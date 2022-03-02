@@ -1,7 +1,8 @@
 [package]
 name = "project_oak"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
+description = "Proof of concept for a action/inverse and step/command based installer and inferred uninstaller"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,3 +13,6 @@ fs_extra = "1.2.0"
 threadpool = "1.8.1"
 serde =  { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
+zip-extensions = "0.6.1"
+tempfile = "3.3.0"
+clap = {version = "3.1.5", features = ["cargo"]}

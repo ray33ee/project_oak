@@ -1,12 +1,12 @@
 
 use zip::{ZipArchive, ZipWriter};
-use std::path::Path;
-use std::iter::Zip;
+use std::path::{Path, PathBuf};
 use std::fs::OpenOptions;
 use crate::command::Command;
-use std::borrow::BorrowMut;
 use zip::write::FileOptions;
 use crate::error::{Result};
+use zip_extensions::{ZipWriterExtensions};
+use std::io::{Seek, SeekFrom};
 
 ///A struct used to read an oak archive
 pub struct OakRead {
@@ -30,11 +30,33 @@ impl OakRead {
 
     ///Extract the specified file `name` to `destination`
     pub fn extract<P: AsRef<Path>>(& mut self, name: &str, destination: P) -> Result<()> {
-        let mut afile = self.archive.by_name(name)?;
-        let mut dfile = OpenOptions::new().write(true).create(true).open(destination)?;
-        std::io::copy(& mut afile, & mut dfile)?;
 
-        Ok(())
+
+        let mut afile = self.archive.by_name(name)?;
+
+        if name.as_bytes()[1] == 'd' as u8 {
+
+            let mut temp = tempfile::tempfile().unwrap();
+
+            std::io::copy(& mut afile, & mut temp)?;
+
+            temp.seek(SeekFrom::Start(0)).unwrap();
+
+            let mut archive = zip::ZipArchive::new(temp).unwrap();
+
+            std::fs::create_dir(destination.as_ref())?;
+
+            archive.extract(destination)?;
+
+            Ok(())
+        } else {
+            let mut dfile = OpenOptions::new().write(true).create(true).open(destination)?;
+            std::io::copy(& mut afile, & mut dfile)?;
+
+            Ok(())
+        }
+
+
     }
 }
 
@@ -62,9 +84,24 @@ impl OakWrite {
     pub fn archive<P: AsRef<Path>>(& mut self, path: P) {
 
         if path.as_ref().is_dir() {
-            todo!()
-            //self.archive.add_directory(path, FileOptions::default());
+            //self.archive.add_directory(path.as_ref()., FileOptions::default());
 
+            let mut temp = tempfile::tempfile().unwrap();
+
+            //let mut temp = std::fs::OpenOptions::new().read(true).write(true).create(true).open("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\create.zip").unwrap();
+
+            {
+                let mut writer = ZipWriter::new(&temp);
+
+                writer.create_from_directory(&PathBuf::from(path.as_ref())).unwrap();
+
+            }
+
+            self.archive.start_file(format!("_d_{}", self.count), FileOptions::default()).unwrap();
+
+            temp.seek(SeekFrom::Start(0)).unwrap();
+
+            std::io::copy(& mut temp, & mut self.archive).unwrap();
 
         } else if path.as_ref().is_file() {
             self.archive.start_file(format!("_{}", self.count), FileOptions::default()).unwrap();
@@ -85,10 +122,12 @@ impl OakWrite {
         serde_json::to_writer(& mut self.archive, commands).unwrap()
     }
 
+    /*
     ///Finish the archive. This is called on `drop`
     pub fn finish(& mut self) -> Result<()> {
         self.archive.finish()?;
         Ok(())
     }
+    */
 
 }

@@ -2,7 +2,7 @@ use crate::steps::Step;
 use serde::{Serialize, Deserialize};
 use crate::oak::OakRead;
 use crate::oak::OakWrite;
-use crate::error::{Error, Result};
+use crate::error::{Result};
 
 ///A command is a series of steps, executed in order. It also has an inverse, defined as the inverse of each step in reverse order
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,7 +25,7 @@ impl Command {
                     //If a step fails, we must iterate in reverse order over the steps executed so far and execute their inverses
 
                     for inverse in inverses {
-                        inverse.action(install_archive, Some(uninstall_archive));
+                        inverse.action(install_archive, Some(uninstall_archive)).unwrap();
                     }
 
                     return Err(e);

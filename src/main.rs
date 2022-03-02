@@ -3,14 +3,13 @@ extern crate fs_extra;
 extern crate threadpool;
 extern crate serde;
 extern crate serde_json;
+extern crate zip_extensions;
+extern crate clap;
 
-use command::Command;
-use steps::{Step, FileType};
-use std::path::{PathBuf, Path};
-use std::thread::ThreadId;
-use threadpool::ThreadPool;
+use std::path::{Path};
 use oak::{OakRead, OakWrite};
 use error::Error;
+
 
 mod error;
 mod steps;
@@ -19,6 +18,7 @@ mod vm;
 mod oak;
 
 use crate::error::Result;
+use std::fs::OpenOptions;
 
 ///Install from the `installer` file, and write the uninstaller to `uninstaller`
 fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
@@ -64,7 +64,9 @@ fn uninstall<P: AsRef<Path>>(uninstaller: P) -> Result<()> {
 
     let mut oak_read = OakRead::new(uninstaller.as_ref()).unwrap();
 
-    for inv in oak_read.commands().unwrap().iter() {
+    let commands = oak_read.commands().unwrap();
+
+    for inv in commands.iter() {
         inv.inverse(& mut oak_read);
     }
 
@@ -73,31 +75,98 @@ fn uninstall<P: AsRef<Path>>(uninstaller: P) -> Result<()> {
     Ok(())
 }
 
+///List all the files, folders and commands in an oak repo
+fn list<P: AsRef<Path>>(repo: P) -> Result<()> {
+
+    {
+        let archive = zip::ZipArchive::new(OpenOptions::new().read(true).open(repo.as_ref())?)?;
+
+        println!("Stored files:");
+
+        for name in archive.file_names() {
+            if name != "_commands" {
+                println!("    {}", name);
+            }
+        }
+    }
+
+    let mut read = OakRead::new(repo.as_ref()).unwrap();
+
+    println!("Commands:");
+
+    println!("{}", serde_json::to_string_pretty(&read.commands().unwrap()).unwrap());
+
+
+    Ok(())
+}
+
 fn main() {
 
-    let command1 = Command(
-        vec![
-            Step::Copy { source: PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\file"), destination: PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\install") },
-            Step::Rename { from: PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\install\\xparc"), to: PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\install\\shanrkbark") }]);
+    let m = clap::Command::new(clap::crate_name!())
+        .author(clap::crate_authors!())
+        .version(clap::crate_version!())
+        .about(clap::crate_description!())
+        .subcommands(vec![
+            clap::Command::new("install")
+                .about("Install and create uninstaller")
+                .arg(
+                    clap::Arg::new("installer path")
+                        .short('i')
+                        .long("installer_path")
+                        .takes_value(true)
+                        .value_name("Installer path")
+                        //.validator(|x| {Ok(())})
+                        .required(true))
+                .arg(
+                    clap::Arg::new("uninstaller path")
+                        .short('u')
+                        .long("uninstaller_path")
+                        .takes_value(true)
+                        .value_name("Uninstaller path")
+                        //.validator(|x| {Ok(())})
+                        .required(true)),
+            clap::Command::new("uninstall")
+                .about("Install and create uninstaller")
+                .arg(
+                    clap::Arg::new("uninstaller path")
+                        .short('u')
+                        .long("uninstaller_path")
+                        .takes_value(true)
+                        .value_name("Uninstaller path")
+                        //.validator(|x| {Ok(())})
+                        .required(true)),
+            clap::Command::new("list")
+                .about("List the files, folders and commands associated with an oak archive")
+                .arg(
+                    clap::Arg::new("path")
+                        .short('p')
+                        .long("path")
+                        .takes_value(true)
+                        .value_name("Path")
+                        //.validator(|x| {Ok(())})
+                        .required(true))
+        ]).get_matches();
 
-    let command2 = Command(vec![Step::Print { message: format!("Printed from a command thread!") }]);
+    match m.subcommand().unwrap() {
+        ("install", matches) => {
+            let i = matches.value_of("installer path").unwrap();
+            let u = matches.value_of("uninstaller path").unwrap();
 
-    let command3 = Command(vec![Step::File { name: "_0".to_string(), destination: PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\SkypeIcon.idb") }]);
+            install(i, u).unwrap();
+        }
+        ("uninstall", matches) => {
+            let u = matches.value_of("uninstaller path").unwrap();
 
-    let command4 = Command(vec![Step::Delete { path: PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\p.txt") }]);
+            uninstall(u).unwrap();
 
-    //let command5 = Command(vec![Step::Rename { from: PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\stuff.txt"), to: PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\renamed.txt") },
-    //                            Step::Panic]);
+        }
+        ("list", matches) => {
+            let p = matches.value_of("path").unwrap();
 
-    let commands = vec![command1, command2, command3, command4];
+            list(p).unwrap();
 
-    println!("{}", serde_json::to_string_pretty(&commands).unwrap());
-
-
-    //install("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\a.zip", "E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\b.zip").unwrap();
-
-    uninstall("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\b.zip").unwrap();
-
-
+        }
+        _ => {}
+    }
 
 }
