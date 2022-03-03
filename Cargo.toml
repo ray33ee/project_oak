@@ -1,6 +1,6 @@
 [package]
 name = "project_oak"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "Proof of concept for a action/inverse and step/command based installer and inferred uninstaller"
 
@@ -10,7 +10,6 @@ description = "Proof of concept for a action/inverse and step/command based inst
 zip = "0.5.13"
 reqwest = "0.11.9"
 fs_extra = "1.2.0"
-threadpool = "1.8.1"
 serde =  { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
 zip-extensions = "0.6.1"

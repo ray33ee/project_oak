@@ -5,6 +5,7 @@ use std::fs::OpenOptions;
 use serde::{Serialize, Deserialize};
 use crate::oak::OakRead;
 use crate::oak::OakWrite;
+use tempfile::TempDir;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FileType {
@@ -13,6 +14,13 @@ pub enum FileType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum SpecialPath {
+    Path(PathBuf),
+    TemporaryFolder,
+}
+
+///A step is the smallest unit of an installation process
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Step {
     Data{ name: String, destination: PathBuf },
     Move{ source: PathBuf, destination: PathBuf },
@@ -20,9 +28,10 @@ pub enum Step {
     Create { path: PathBuf, f_type: FileType },
     Copy { source: PathBuf, destination: PathBuf },
     Rename { from: PathBuf, to: PathBuf },
+    //Zip { source: SpecialPath, destination: SpecialPath },
     //Environment,
     //Regedit,
-    //Download { url: String, destination: PathBuf },
+    //Download { url: String, destination: SpecialPath },
     //Install - Installer path, plus a reg entry to check it installed correctly, locate the uninstaller,
     //Uninstall - Uninstaller path, plus a reg entry to check it installed correctly,
     //Edit,
@@ -38,6 +47,7 @@ impl Step {
     pub fn action(
         & self,
         //vm: & mut VM,
+        temp: Option<& TempDir>,
         install_archive: & mut OakRead,
         mut uninstall_archive: Option<& mut OakWrite>,
         //default: bool

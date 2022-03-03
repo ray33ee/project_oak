@@ -1,10 +1,10 @@
 extern crate zip;
 extern crate fs_extra;
-extern crate threadpool;
 extern crate serde;
 extern crate serde_json;
 extern crate zip_extensions;
 extern crate clap;
+extern crate tempfile;
 
 use std::path::{Path};
 use oak::{OakRead, OakWrite};
@@ -30,8 +30,10 @@ fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
 
     let mut inverses = Vec::with_capacity(commands.len());
 
+    let mut temp = tempfile::tempdir().unwrap();
+
     for command in commands {
-        match command.action(&mut oak_read, &mut oak_write) {
+        match command.action(&temp, &mut oak_read, &mut oak_write) {
             Ok(inv) => {
                 if !inv.is_empty() {
                     inverses.push(inv);
