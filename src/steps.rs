@@ -23,10 +23,10 @@ pub enum SpecialPath {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Step {
     Data{ name: String, destination: PathBuf },
-    Move{ source: PathBuf, destination: PathBuf },
+    Move{ source: SpecialPath, destination: PathBuf },
     Delete { path: PathBuf },
     Create { path: PathBuf, f_type: FileType },
-    Copy { source: PathBuf, destination: PathBuf },
+    Copy { source: SpecialPath, destination: PathBuf },
     Rename { from: PathBuf, to: PathBuf },
     //Zip { source: SpecialPath, destination: SpecialPath },
     //Environment,
@@ -64,47 +64,60 @@ impl Step {
             }
             Step::Move { source, destination } => {
 
+                let source_path = match source {
+                    SpecialPath::Path(s) => {s.as_path()}
+                    SpecialPath::TemporaryFolder => {temp.unwrap().path()}
+                };
+
                 if destination.exists() {
                     Err(crate::Error::AlreadyExists)
                 } else {
-                    if source.is_dir() {
+                    if source_path.is_dir() {
                         let mut options = fs_extra::dir::CopyOptions::default();
                         options.content_only = true;
 
-                        fs_extra::dir::move_dir(&source, &destination, &options)?;
+                        fs_extra::dir::move_dir(&source_path, &destination, &options)?;
 
-                    } else if source.is_file() {
+                    } else if source_path.is_file() {
                         let options = fs_extra::file::CopyOptions::default();
 
-                        fs_extra::file::move_file(&source, &destination, &options)?;
+                        fs_extra::file::move_file(&source_path, &destination, &options)?;
 
                     } else {
                         panic!("File is not a path or file");
                     }
 
-                    Ok(Some(Step::Move { source: destination.clone(), destination: source.clone() }))
+                    match source {
+                        SpecialPath::Path(s) => {
+                            Ok(Some(Step::Move { source: SpecialPath::Path(destination.clone()), destination: s.clone() }))
+                        }
+                        SpecialPath::TemporaryFolder => {
+
+                            Ok(Some(Step::Delete { path: destination.clone() }))
+                        }
+                    }
+
+
                 }
 
             }
             Step::Delete { path } => {
 
-                if let Some( archive) = uninstall_archive.as_mut() {
-                    archive.archive(&path);
-                }
+                let name = match uninstall_archive.as_mut() {
+                    None => { None }
+                    Some(archive) => {Some(archive.archive(&path))}
+                };
 
-                let prefix = if path.is_dir() {
+                if path.is_dir() {
                     std::fs::remove_dir_all(&path)?;
-
-                    "d_"
                 } else if path.is_file() {
                     std::fs::remove_file(&path)?;
-                    ""
                 } else {
                     panic!("File is not a path or file");
                 };
 
                 if let Some(archive) = uninstall_archive {
-                    Ok(Some(Step::Data { name: format!("_{}{}", prefix, archive.count()-1), destination: path.clone() }))
+                    Ok(Some(Step::Data { name: name.unwrap(), destination: path.clone() }))
                 } else {
                     Ok(None)
                 }
@@ -126,17 +139,22 @@ impl Step {
             }
             Step::Copy { source, destination } => {
 
+                let source_path = match source {
+                    SpecialPath::Path(s) => {s.as_path()}
+                    SpecialPath::TemporaryFolder => {temp.unwrap().path()}
+                };
+
                 if destination.exists() {
                     Err(crate::error::Error::AlreadyExists)
                 } else {
-                    if source.is_file() {
+                    if source_path.is_file() {
 
-                        std::fs::copy(&source, &destination)?;
-                    } else if source.is_dir() {
+                        std::fs::copy(&source_path, &destination)?;
+                    } else if source_path.is_dir() {
                         let mut options = fs_extra::dir::CopyOptions::default();
                         options.content_only = true;
 
-                        fs_extra::dir::copy(&source, &destination, &options)?;
+                        fs_extra::dir::copy(&source_path, &destination, &options)?;
                     } else {
                         panic!("Source is not a file or directory");
                     }

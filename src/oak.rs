@@ -81,7 +81,7 @@ impl OakWrite {
     pub fn count(&self) -> u32 { self.count }
 
     ///Archive a file or folder into the archive
-    pub fn archive<P: AsRef<Path>>(& mut self, path: P) {
+    pub fn archive<P: AsRef<Path>>(& mut self, path: P) -> String {
 
         if path.as_ref().is_dir() {
             //self.archive.add_directory(path.as_ref()., FileOptions::default());
@@ -97,21 +97,28 @@ impl OakWrite {
 
             }
 
-            self.archive.start_file(format!("_d_{}", self.count), FileOptions::default()).unwrap();
+            let identifier = format!("_d_{}", self.count);
+            self.archive.start_file(identifier.clone(), FileOptions::default()).unwrap();
 
             temp.seek(SeekFrom::Start(0)).unwrap();
 
             std::io::copy(& mut temp, & mut self.archive).unwrap();
+            self.count = self.count + 1;
 
+
+            identifier
         } else if path.as_ref().is_file() {
-            self.archive.start_file(format!("_{}", self.count), FileOptions::default()).unwrap();
+            let identifier =format!("_{}", self.count);
+            self.archive.start_file(identifier.clone(), FileOptions::default()).unwrap();
             let mut file  = OpenOptions::new().read(true).open(path.as_ref()).unwrap();
             std::io::copy(& mut file, & mut self.archive).unwrap();
+            self.count = self.count + 1;
+            identifier
         } else {
             panic!("{:?} is not a file or folder", path.as_ref());
         }
 
-        self.count = self.count + 1;
+
 
     }
 

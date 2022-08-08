@@ -6,10 +6,9 @@ extern crate zip_extensions;
 extern crate clap;
 extern crate tempfile;
 
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use oak::{OakRead, OakWrite};
 use error::Error;
-
 
 mod error;
 mod steps;
@@ -19,6 +18,9 @@ mod oak;
 
 use crate::error::Result;
 use std::fs::OpenOptions;
+use std::io::Read;
+use steps::{Step, SpecialPath};
+use command::Command;
 
 ///Install from the `installer` file, and write the uninstaller to `uninstaller`
 fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
@@ -102,6 +104,80 @@ fn list<P: AsRef<Path>>(repo: P) -> Result<()> {
     Ok(())
 }
 
+// Really simple language for oak
+fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) {
+
+    let contents = {
+        let mut file = OpenOptions::new().read(true).open(source_file.as_ref()).unwrap();
+
+        let mut contents = String::new();
+
+        file.read_to_string(&mut contents);
+
+        contents
+    };
+
+    let mut writer = OakWrite::new(installer_path);
+
+    let mut tokens = contents.split(',');
+
+    let mut commands = Vec::new();
+
+    let mut command = Vec::new();
+
+    let mut token = tokens.next();
+
+
+    while token.is_some() {
+        match token.unwrap() {
+            "data" | "file" => {
+                let name = PathBuf::from(tokens.next().unwrap());
+                let name = writer.archive(name);
+                println!("name: {}", name);
+                let destination = PathBuf::from(tokens.next().unwrap());
+                command.push(Step::Data { name, destination });
+            }
+            "move" => {
+                let source = match tokens.next().unwrap() {
+                    "temp" => SpecialPath::TemporaryFolder,
+                    default => SpecialPath::Path(PathBuf::from(default))
+                };
+                let destination = PathBuf::from(tokens.next().unwrap());
+                command.push(Step::Move { source, destination });
+            }
+            "delete" => {
+                let path = PathBuf::from(tokens.next().unwrap());
+                command.push(Step::Delete { path })
+            }
+            "copy" => {
+                let source = match tokens.next().unwrap() {
+                    "temp" => SpecialPath::TemporaryFolder,
+                    default => SpecialPath::Path(PathBuf::from(default))
+                };
+                let destination = PathBuf::from(tokens.next().unwrap());
+                command.push(Step::Copy { source, destination });
+            }
+            "rename" => {
+                let from = PathBuf::from(tokens.next().unwrap());
+                let to = PathBuf::from(tokens.next().unwrap());
+                command.push(Step::Rename { from, to });
+            }
+            "end_command" => {
+                commands.push(Command(command));
+                command = Vec::new();
+            }
+            _ => {
+
+            }
+        }
+
+        token = tokens.next();
+    }
+
+    writer.commands(&commands);
+
+}
+
 fn main() {
 
     let m = clap::Command::new(clap::crate_name!())
@@ -127,6 +203,27 @@ fn main() {
                         .value_name("Uninstaller path")
                         //.validator(|x| {Ok(())})
                         .required(true)),
+
+
+            clap::Command::new("create")
+                .about("Create an installer from a script")
+                .arg(
+                    clap::Arg::new("script path")
+                        .short('s')
+                        .long("script_path")
+                        .takes_value(true)
+                        .value_name("Script path")
+                        //.validator(|x| {Ok(())})
+                        .required(true))
+                .arg(
+                    clap::Arg::new("installer path")
+                        .short('i')
+                        .long("installer_path")
+                        .takes_value(true)
+                        .value_name("Installer path")
+                        //.validator(|x| {Ok(())})
+                        .required(true)),
+
             clap::Command::new("uninstall")
                 .about("Install and create uninstaller")
                 .arg(
@@ -166,6 +263,13 @@ fn main() {
             let p = matches.value_of("path").unwrap();
 
             list(p).unwrap();
+
+        }
+        ("create", matches) => {
+            let s = matches.value_of("script path").unwrap();
+            let i = matches.value_of("installer path").unwrap();
+
+            create_installer(s, i);
 
         }
         _ => {}
