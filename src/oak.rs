@@ -75,11 +75,6 @@ impl OakWrite {
         }
     }
 
-    ///Returns the current count
-    ///
-    /// Each write to the archive, the count variable is incremented. Used to uniquely name files in an oak archive
-    pub fn count(&self) -> u32 { self.count }
-
     ///Archive a file or folder into the archive
     pub fn archive<P: AsRef<Path>>(& mut self, path: P) -> String {
 

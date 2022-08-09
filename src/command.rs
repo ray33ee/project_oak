@@ -25,6 +25,8 @@ impl Command {
                 Err(e) => {
                     //If a step fails, we must iterate in reverse order over the steps executed so far and execute their inverses
 
+                    println!("Failed action: {:?}", step);
+
                     for inverse in inverses {
                         inverse.action(None, install_archive, Some(uninstall_archive)).unwrap();
                     }

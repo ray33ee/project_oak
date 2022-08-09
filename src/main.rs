@@ -19,8 +19,9 @@ mod oak;
 use crate::error::Result;
 use std::fs::OpenOptions;
 use std::io::Read;
-use steps::{Step, SpecialPath};
+use steps::{Step, SpecialPath, FileType};
 use command::Command;
+use tempfile::TempDir;
 
 ///Install from the `installer` file, and write the uninstaller to `uninstaller`
 fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
@@ -32,7 +33,7 @@ fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
 
     let mut inverses = Vec::with_capacity(commands.len());
 
-    let mut temp = tempfile::tempdir().unwrap();
+    let temp = tempfile::tempdir().unwrap();
 
     for command in commands {
         match command.action(&temp, &mut oak_read, &mut oak_write) {
@@ -43,6 +44,7 @@ fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
             }
             Err(e) => {
                 println!("Error: {:?}", &e);
+                println!("Command: {:?}", &command);
 
                 //A command has failed. The failed command has itself been reversed (handled in Command::action)
                 //But the other commands that succeeded needs reversing too:
@@ -105,14 +107,14 @@ fn list<P: AsRef<Path>>(repo: P) -> Result<()> {
 }
 
 // Really simple language for oak
-fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) {
+fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result<()> {
 
     let contents = {
-        let mut file = OpenOptions::new().read(true).open(source_file.as_ref()).unwrap();
+        let mut file = OpenOptions::new().read(true).open(source_file.as_ref())?;
 
         let mut contents = String::new();
 
-        file.read_to_string(&mut contents);
+        file.read_to_string(&mut contents)?;
 
         contents
     };
@@ -134,14 +136,12 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) {
                 let name = PathBuf::from(tokens.next().unwrap());
                 let name = writer.archive(name);
                 println!("name: {}", name);
-                let destination = PathBuf::from(tokens.next().unwrap());
+                let destination = SpecialPath::from(tokens.next().unwrap());
                 command.push(Step::Data { name, destination });
             }
             "move" => {
-                let source = match tokens.next().unwrap() {
-                    "temp" => SpecialPath::TemporaryFolder,
-                    default => SpecialPath::Path(PathBuf::from(default))
-                };
+                let source = SpecialPath::from(tokens.next().unwrap());
+
                 let destination = PathBuf::from(tokens.next().unwrap());
                 command.push(Step::Move { source, destination });
             }
@@ -149,17 +149,28 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) {
                 let path = PathBuf::from(tokens.next().unwrap());
                 command.push(Step::Delete { path })
             }
-            "copy" => {
-                let source = match tokens.next().unwrap() {
-                    "temp" => SpecialPath::TemporaryFolder,
-                    default => SpecialPath::Path(PathBuf::from(default))
+            "create" => {
+                let f_type = match tokens.next().unwrap() {
+                    "file" => {FileType::File}
+                    "folder" | "dir" | "directory" => {FileType::Folder}
+                    _ => {panic!("Invalid file type (must be 'file' or 'dir'")}
                 };
+                let path = SpecialPath::from(tokens.next().unwrap());
+                command.push(Step::Create { path, f_type });
+            }
+            "copy" => {
+                let source = SpecialPath::from(tokens.next().unwrap());
                 let destination = PathBuf::from(tokens.next().unwrap());
                 command.push(Step::Copy { source, destination });
             }
+            "download" => {
+                let url = String::from(tokens.next().unwrap());
+                let destination = SpecialPath::from(tokens.next().unwrap());
+                command.push(Step::Download { url, destination })
+            }
             "rename" => {
-                let from = PathBuf::from(tokens.next().unwrap());
-                let to = PathBuf::from(tokens.next().unwrap());
+                let from = SpecialPath::from(tokens.next().unwrap());
+                let to = SpecialPath::from(tokens.next().unwrap());
                 command.push(Step::Rename { from, to });
             }
             "end_command" => {
@@ -176,10 +187,29 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) {
 
     writer.commands(&commands);
 
+    Ok(())
+
 }
 
 fn main() {
+/*
+    let temp = tempfile::tempdir().unwrap();
 
+    println!("path: {:?}", temp.path());
+
+    let rel = PathBuf::from("thing.txt");
+
+    let mut total = PathBuf::from(temp.path());
+    total.push(rel);
+
+    OpenOptions::new().create_new(true).write(true).open(&total).unwrap();
+
+    println!("path2: {:?}", total);
+
+    let options = fs_extra::file::CopyOptions::default();
+
+    fs_extra::file::move_file(&total, "E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\t.txt", &options).unwrap();
+*/
     let m = clap::Command::new(clap::crate_name!())
         .author(clap::crate_authors!())
         .version(clap::crate_version!())
@@ -269,7 +299,8 @@ fn main() {
             let s = matches.value_of("script path").unwrap();
             let i = matches.value_of("installer path").unwrap();
 
-            create_installer(s, i);
+            create_installer(s, i).unwrap();
+            list(i).unwrap();
 
         }
         _ => {}
