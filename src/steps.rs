@@ -1,17 +1,115 @@
 
 use crate::error::{Result, Error};
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::fs::OpenOptions;
 use serde::{Serialize, Deserialize};
 use crate::oak::OakRead;
 use crate::oak::OakWrite;
 use tempfile::TempDir;
+use registry::Security;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FileType {
     File,
     Folder,
     Shortcut(PathBuf),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Data {
+    None,
+    String(String),
+    ExpandString(String),
+    Binary(Vec<u8>),
+    U32(u32),
+    U32BE(u32),
+    Link,
+    MultiString(Vec<String>),
+    ResourceList,
+    FullResourceDescriptor,
+    ResourceRequirementsList,
+    U64(u64),
+}
+
+impl From<&str> for Data {
+    fn from(s: &str) -> Self {
+        match s.parse::<u32>() {
+            Ok(v) => {Data::U32(v)}
+            Err(_) => {Data::String(String::from(s))}
+        }
+    }
+}
+
+impl From<registry::Data> for Data {
+    fn from(d: registry::Data) -> Self {
+        match d {
+            registry::Data::None => {Data::None}
+            registry::Data::String(z) => {Data::String(z.to_string_lossy())}
+            registry::Data::ExpandString(z) => {Data::ExpandString(z.to_string_lossy())}
+            registry::Data::Binary(z) => {Data::Binary(z)}
+            registry::Data::U32(z) => {Data::U32(z)}
+            registry::Data::U32BE(z) => {Data::U32BE(z)}
+            registry::Data::Link => {Data::Link}
+            registry::Data::MultiString(z) => {Data::MultiString(z.iter().map(|x| x.to_string_lossy()).collect())}
+            registry::Data::ResourceList => {Data::ResourceList}
+            registry::Data::FullResourceDescriptor => {Data::FullResourceDescriptor}
+            registry::Data::ResourceRequirementsList => {Data::ResourceRequirementsList}
+            registry::Data::U64(z) => {Data::U64(z)}
+        }
+    }
+}
+
+impl From<&Data> for registry::Data {
+    fn from(d: &Data) -> Self {
+        match d {
+            Data::None => {registry::Data::None}
+            Data::String(z) => {registry::Data::String(utfx::U16CString::try_from(z).unwrap())}
+            Data::ExpandString(z) => {registry::Data::ExpandString(utfx::U16CString::try_from(z).unwrap())}
+            Data::Binary(z) => {registry::Data::Binary(z.clone())}
+            Data::U32(z) => {registry::Data::U32(z.clone())}
+            Data::U32BE(z) => {registry::Data::U32BE(z.clone())}
+            Data::Link => {registry::Data::Link}
+            Data::MultiString(z) => {registry::Data::MultiString(z.iter().map(|s| utfx::U16CString::try_from(s).unwrap()).collect())}
+            Data::ResourceList => {registry::Data::ResourceList}
+            Data::FullResourceDescriptor => {registry::Data::FullResourceDescriptor}
+            Data::ResourceRequirementsList => {registry::Data::ResourceRequirementsList}
+            Data::U64(z) => {registry::Data::U64(z.clone()) }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum RootKey {
+    HKLM,
+    HKCC,
+    HKCR,
+    HKCU,
+    HKU
+}
+
+impl From<&str> for RootKey {
+    fn from(s: &str) -> Self {
+        match s {
+            "hklm" => RootKey::HKLM,
+            "hkcc" => RootKey::HKCC,
+            "hkcr" => RootKey::HKCR,
+            "hkcu" => RootKey::HKCU,
+            "hku" => RootKey::HKU,
+            _ => panic!("Invalid registry root key")
+        }
+    }
+}
+
+impl From<&RootKey> for registry::Hive {
+    fn from(rk: &RootKey) -> Self {
+        match rk {
+            RootKey::HKLM => {registry::Hive::LocalMachine}
+            RootKey::HKCC => {registry::Hive::CurrentConfig}
+            RootKey::HKCR => {registry::Hive::ClassesRoot}
+            RootKey::HKCU => {registry::Hive::CurrentUser}
+            RootKey::HKU => {registry::Hive::Users}
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -39,10 +137,6 @@ impl SpecialPath {
             true
         }
     }
-
-    pub fn is_perm(&self) -> bool {
-        !self.is_temp()
-    }
 }
 
 impl From<&str>  for  SpecialPath {
@@ -64,19 +158,17 @@ pub enum Step {
     Move{ source: SpecialPath, destination: PathBuf },
     Delete { path: PathBuf },
     Create { path: SpecialPath, f_type: FileType },
-    Copy { source: SpecialPath, destination: PathBuf },
+    Copy { source: SpecialPath, destination: SpecialPath },
     Rename { from: SpecialPath, to: SpecialPath },
-    //Zip { source: SpecialPath, destination: SpecialPath }, - Take a folder and zip its contents
-    //Unzip { source: SpecialPath, destination: SpecialPath }, - Take a zip archive and extract it to a location
-    //Environment,
+    Zip { folder: SpecialPath, archive: SpecialPath },
+    Unzip { folder: SpecialPath, archive: SpecialPath },
     //Regedit,
+    DeleteRegistryEntry { root: RootKey, key: String, value: Option<String> },
+    WriteRegistryValue { root: RootKey, key: String, value: String, data: Data },
+    WriteRegistryKey { root: RootKey, key: String, new: String },
     Download { url: String, destination: SpecialPath },
-    //Install - Installer path, plus a reg entry to check it installed correctly, locate the uninstaller,
-    //Uninstall - Uninstaller path, plus a reg entry to check it installed correctly,
-    //Edit{ source: SpecialPath }, - Edit a text file, be sure to make this as comprehensive as possible
-    //If,
+    //Edit{ source: SpecialPath }, //- Edit a text file using something like sed or awk. What should its inverse be? Editing the line out, or restoring the original file?
     Print { message: String },
-    //String,
     Panic,
 }
 
@@ -191,23 +283,28 @@ impl Step {
             Step::Copy { source, destination } => {
 
                 let source_path = source.path(temp);
+                let destination_path = destination.path(temp);
 
-                if destination.exists() {
+                if destination_path.exists() {
                     Err(crate::error::Error::AlreadyExists)
                 } else {
                     if source_path.is_file() {
 
-                        std::fs::copy(&source_path, &destination)?;
+                        std::fs::copy(&source_path, &destination_path)?;
                     } else if source_path.is_dir() {
                         let mut options = fs_extra::dir::CopyOptions::default();
                         options.content_only = true;
 
-                        fs_extra::dir::copy(&source_path, &destination, &options)?;
+                        fs_extra::dir::copy(&source_path, &destination_path, &options)?;
                     } else {
                         panic!("Source is not a file or directory");
                     }
 
-                    Ok(Some(Step::Delete { path: destination.clone() }))
+                    if destination.is_temp() {
+                        Ok(None)
+                    } else {
+                        Ok(Some(Step::Delete { path: destination_path.clone() }))
+                    }
                 }
             }
             Step::Rename { from, to } => {
@@ -228,6 +325,85 @@ impl Step {
                 }
 
 
+            }
+            Step::Zip { folder, archive } => {
+                zip_extensions::write::zip_create_from_directory(&archive.path(temp), &folder.path(temp))?;
+
+                if archive.is_temp() {
+                    Ok(None)
+                } else {
+                    Ok(Some(Step::Delete { path: archive.path(temp) }))
+                }
+
+            }
+            Step::Unzip { folder, archive } => {
+                std::fs::create_dir(&folder.path(temp))?;
+
+                zip_extensions::read::zip_extract(&archive.path(temp), &folder.path(temp))?;
+
+                if archive.is_temp() {
+                    Ok(None)
+                } else {
+                    Ok(Some(Step::Delete { path: archive.path(temp) }))
+                }
+
+            }
+            Step::DeleteRegistryEntry { root, key, value } => {
+
+                let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
+
+
+                match value {
+                    None => {
+                        reg.delete("", false)?;
+                    }
+                    Some(val) => {
+                        reg.delete_value(val)?;
+                    }
+                }
+
+
+                Ok(None)
+            }
+            Step::WriteRegistryValue { root, key, value, data } => {
+
+                let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
+
+                println!("reg: {}", reg);
+
+                //For inverses, there are two cases. If the value already exists (i.e. we are modifying it)
+                //and if the value does not already exist (i.e. we are creating it). In the first case,
+                //the inverse is to revert to the previous value. In the second case, the inverse is
+                //to delete the value.
+                let inverse = if let Err(registry::value::Error::NotFound(_,_)) = reg.value(value) {
+                    Step::DeleteRegistryEntry {
+                        root: root.clone(),
+                        key: key.clone(),
+                        value: Some(value.clone()),
+                    }
+                } else {
+                    //Save the old value
+                    let old_value = reg.value(value)?;
+
+                    Step::WriteRegistryValue {
+                        root: root.clone(),
+                        key: key.clone(),
+                        value: value.clone(),
+                        data: Data::from(old_value)
+                    }
+                };
+
+                reg.set_value(value, &registry::Data::from(data))?;
+
+                Ok(Some(inverse))
+            }
+            Step::WriteRegistryKey { root, key, new } => {
+
+                let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
+
+                reg.create(new, Security::AllAccess)?;
+
+                Ok(None)
             }
             Step::Download { url, destination } => {
 

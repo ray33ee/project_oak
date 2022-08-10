@@ -11,7 +11,8 @@ pub enum Error {
     FSExtra(fs_extra::error::Error),
     Zip(zip::result::ZipError),
     Serde(serde_json::Error),
-    Reqwest(reqwest::Error)
+    Reqwest(reqwest::Error),
+    Registry(registry::Error)
 }
 
 impl From<std::io::Error> for Error {
@@ -40,4 +41,12 @@ impl From<serde_json::Error> for Error {
 
 impl From<reqwest::Error> for Error {
     fn from(e: reqwest::Error) -> Self { Error::Reqwest(e) }
+}
+
+impl From<registry::key::Error> for Error {
+    fn from(e: registry::key::Error) -> Self { Error::Registry(registry::Error::from(e)) }
+}
+
+impl From<registry::value::Error> for Error {
+    fn from(e: registry::value::Error) -> Self { Error::Registry(registry::Error::from(e)) }
 }

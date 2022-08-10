@@ -591,14 +591,16 @@ dependencies = [
 
 [[package]]
 name = "project_oak"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "clap",
  "fs_extra",
+ "registry",
  "reqwest",
  "serde",
  "serde_json",
  "tempfile",
+ "utfx",
  "zip",
  "zip-extensions",
 ]
@@ -619,6 +621,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8380fe0152551244f0747b1bf41737e0f8a74f97a14ccefd1148187271634f3c"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "registry"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83e4b158bf49b0d000013487636c92268de4cfd26cdbb629f020a612749f12c4"
+dependencies = [
+ "bitflags",
+ "log",
+ "thiserror",
+ "utfx",
+ "winapi",
 ]
 
 [[package]]
@@ -961,6 +976,12 @@ dependencies = [
  "matches",
  "percent-encoding",
 ]
+
+[[package]]
+name = "utfx"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "133bf74f01486773317ddfcde8e2e20d2933cc3b68ab797e5d718bef996a81de"
 
 [[package]]
 name = "vcpkg"

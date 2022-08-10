@@ -5,6 +5,7 @@ extern crate serde_json;
 extern crate zip_extensions;
 extern crate clap;
 extern crate tempfile;
+extern crate registry;
 
 use std::path::{Path, PathBuf};
 use oak::{OakRead, OakWrite};
@@ -21,7 +22,7 @@ use std::fs::OpenOptions;
 use std::io::Read;
 use steps::{Step, SpecialPath, FileType};
 use command::Command;
-use tempfile::TempDir;
+use crate::steps::{Data, RootKey};
 
 ///Install from the `installer` file, and write the uninstaller to `uninstaller`
 fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
@@ -160,7 +161,7 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
             }
             "copy" => {
                 let source = SpecialPath::from(tokens.next().unwrap());
-                let destination = PathBuf::from(tokens.next().unwrap());
+                let destination = SpecialPath::from(tokens.next().unwrap());
                 command.push(Step::Copy { source, destination });
             }
             "download" => {
@@ -172,6 +173,33 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
                 let from = SpecialPath::from(tokens.next().unwrap());
                 let to = SpecialPath::from(tokens.next().unwrap());
                 command.push(Step::Rename { from, to });
+            }
+            "zip" => {
+                let folder = SpecialPath::from(tokens.next().unwrap());
+                let archive = SpecialPath::from(tokens.next().unwrap());
+                command.push(Step::Zip { folder, archive });
+            }
+            "unzip" => {
+                let folder = SpecialPath::from(tokens.next().unwrap());
+                let archive = SpecialPath::from(tokens.next().unwrap());
+                command.push(Step::Unzip { folder, archive });
+            }
+            "reg_write_value" => {
+
+                let root = RootKey::from(tokens.next().unwrap());
+                let key = String::from(tokens.next().unwrap());
+                let value = String::from(tokens.next().unwrap());
+                let data = Data::from(tokens.next().unwrap());
+
+                command.push(Step::WriteRegistryValue { root, key, value, data })
+            }
+            "reg_write_key" => {
+
+                let root = RootKey::from(tokens.next().unwrap());
+                let key = String::from(tokens.next().unwrap());
+                let new = String::from(tokens.next().unwrap());
+
+                command.push(Step::WriteRegistryKey { root, key, new })
             }
             "end_command" => {
                 commands.push(Command(command));
@@ -192,24 +220,7 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
 }
 
 fn main() {
-/*
-    let temp = tempfile::tempdir().unwrap();
 
-    println!("path: {:?}", temp.path());
-
-    let rel = PathBuf::from("thing.txt");
-
-    let mut total = PathBuf::from(temp.path());
-    total.push(rel);
-
-    OpenOptions::new().create_new(true).write(true).open(&total).unwrap();
-
-    println!("path2: {:?}", total);
-
-    let options = fs_extra::file::CopyOptions::default();
-
-    fs_extra::file::move_file(&total, "E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\t.txt", &options).unwrap();
-*/
     let m = clap::Command::new(clap::crate_name!())
         .author(clap::crate_authors!())
         .version(clap::crate_version!())
@@ -276,34 +287,51 @@ fn main() {
                         .required(true))
         ]).get_matches();
 
-    match m.subcommand().unwrap() {
-        ("install", matches) => {
-            let i = matches.value_of("installer path").unwrap();
-            let u = matches.value_of("uninstaller path").unwrap();
+    match m.subcommand() {
+        Some(command) => {
+            match command {
+                ("install", matches) => {
+                    let i = matches.value_of("installer path").unwrap();
+                    let u = matches.value_of("uninstaller path").unwrap();
 
-            install(i, u).unwrap();
+                    install(i, u).unwrap();
+                }
+                ("uninstall", matches) => {
+                    let u = matches.value_of("uninstaller path").unwrap();
+
+                    uninstall(u).unwrap();
+
+                }
+                ("list", matches) => {
+                    let p = matches.value_of("path").unwrap();
+
+                    list(p).unwrap();
+
+                }
+                ("create", matches) => {
+                    let s = matches.value_of("script path").unwrap();
+                    let i = matches.value_of("installer path").unwrap();
+
+                    create_installer(s, i).unwrap();
+                    list(i).unwrap();
+
+                }
+                _ => {}
+            }
         }
-        ("uninstall", matches) => {
-            let u = matches.value_of("uninstaller path").unwrap();
+        None => {
+            //If no arguments are supplied, look to ".\installer" and ".\uninstaller" and run them
 
-            uninstall(u).unwrap();
-
-        }
-        ("list", matches) => {
-            let p = matches.value_of("path").unwrap();
-
-            list(p).unwrap();
-
-        }
-        ("create", matches) => {
-            let s = matches.value_of("script path").unwrap();
-            let i = matches.value_of("installer path").unwrap();
-
-            create_installer(s, i).unwrap();
-            list(i).unwrap();
+            if Path::new("installer").exists() {
+                install("installer", "uninstaller").unwrap();
+            } else if Path::new("uninstaller").exists() {
+                uninstall("uninstaller").unwrap()
+            } else {
+                panic!("No installer or uninstaller found")
+            }
 
         }
-        _ => {}
     }
+
 
 }
