@@ -1,115 +1,23 @@
 
 use crate::error::{Result, Error};
-use std::path::{PathBuf};
-use std::fs::OpenOptions;
-use serde::{Serialize, Deserialize};
 use crate::oak::OakRead;
 use crate::oak::OakWrite;
+use crate::registry_ex;
+
+use std::path::{Path, PathBuf};
+use std::fs::OpenOptions;
+use serde::{Serialize, Deserialize};
 use tempfile::TempDir;
 use registry::Security;
+use registry_ex::RootKey;
+use registry_ex::Data;
+use crate::registry_ex::Tree;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FileType {
     File,
     Folder,
     Shortcut(PathBuf),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Data {
-    None,
-    String(String),
-    ExpandString(String),
-    Binary(Vec<u8>),
-    U32(u32),
-    U32BE(u32),
-    Link,
-    MultiString(Vec<String>),
-    ResourceList,
-    FullResourceDescriptor,
-    ResourceRequirementsList,
-    U64(u64),
-}
-
-impl From<&str> for Data {
-    fn from(s: &str) -> Self {
-        match s.parse::<u32>() {
-            Ok(v) => {Data::U32(v)}
-            Err(_) => {Data::String(String::from(s))}
-        }
-    }
-}
-
-impl From<registry::Data> for Data {
-    fn from(d: registry::Data) -> Self {
-        match d {
-            registry::Data::None => {Data::None}
-            registry::Data::String(z) => {Data::String(z.to_string_lossy())}
-            registry::Data::ExpandString(z) => {Data::ExpandString(z.to_string_lossy())}
-            registry::Data::Binary(z) => {Data::Binary(z)}
-            registry::Data::U32(z) => {Data::U32(z)}
-            registry::Data::U32BE(z) => {Data::U32BE(z)}
-            registry::Data::Link => {Data::Link}
-            registry::Data::MultiString(z) => {Data::MultiString(z.iter().map(|x| x.to_string_lossy()).collect())}
-            registry::Data::ResourceList => {Data::ResourceList}
-            registry::Data::FullResourceDescriptor => {Data::FullResourceDescriptor}
-            registry::Data::ResourceRequirementsList => {Data::ResourceRequirementsList}
-            registry::Data::U64(z) => {Data::U64(z)}
-        }
-    }
-}
-
-impl From<&Data> for registry::Data {
-    fn from(d: &Data) -> Self {
-        match d {
-            Data::None => {registry::Data::None}
-            Data::String(z) => {registry::Data::String(utfx::U16CString::try_from(z).unwrap())}
-            Data::ExpandString(z) => {registry::Data::ExpandString(utfx::U16CString::try_from(z).unwrap())}
-            Data::Binary(z) => {registry::Data::Binary(z.clone())}
-            Data::U32(z) => {registry::Data::U32(z.clone())}
-            Data::U32BE(z) => {registry::Data::U32BE(z.clone())}
-            Data::Link => {registry::Data::Link}
-            Data::MultiString(z) => {registry::Data::MultiString(z.iter().map(|s| utfx::U16CString::try_from(s).unwrap()).collect())}
-            Data::ResourceList => {registry::Data::ResourceList}
-            Data::FullResourceDescriptor => {registry::Data::FullResourceDescriptor}
-            Data::ResourceRequirementsList => {registry::Data::ResourceRequirementsList}
-            Data::U64(z) => {registry::Data::U64(z.clone()) }
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum RootKey {
-    HKLM,
-    HKCC,
-    HKCR,
-    HKCU,
-    HKU
-}
-
-impl From<&str> for RootKey {
-    fn from(s: &str) -> Self {
-        match s {
-            "hklm" => RootKey::HKLM,
-            "hkcc" => RootKey::HKCC,
-            "hkcr" => RootKey::HKCR,
-            "hkcu" => RootKey::HKCU,
-            "hku" => RootKey::HKU,
-            _ => panic!("Invalid registry root key")
-        }
-    }
-}
-
-impl From<&RootKey> for registry::Hive {
-    fn from(rk: &RootKey) -> Self {
-        match rk {
-            RootKey::HKLM => {registry::Hive::LocalMachine}
-            RootKey::HKCC => {registry::Hive::CurrentConfig}
-            RootKey::HKCR => {registry::Hive::ClassesRoot}
-            RootKey::HKCU => {registry::Hive::CurrentUser}
-            RootKey::HKU => {registry::Hive::Users}
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -162,12 +70,12 @@ pub enum Step {
     Rename { from: SpecialPath, to: SpecialPath },
     Zip { folder: SpecialPath, archive: SpecialPath },
     Unzip { folder: SpecialPath, archive: SpecialPath },
-    //Regedit,
     DeleteRegistryEntry { root: RootKey, key: String, value: Option<String> },
     WriteRegistryValue { root: RootKey, key: String, value: String, data: Data },
-    WriteRegistryKey { root: RootKey, key: String, new: String },
+    WriteRegistryKey { root: RootKey, key: String },
+    RestoreRegistryKey { root: RootKey, key: String, tree: Tree }, //Used only as the inverse of a DeleteRegistry key
     Download { url: String, destination: SpecialPath },
-    //Edit{ source: SpecialPath }, //- Edit a text file using something like sed or awk. What should its inverse be? Editing the line out, or restoring the original file?
+    //Edit{ source: SpecialPath }, //- Edit a text file using something like sed or awk. Inverse should be to restore the original file
     Print { message: String },
     Panic,
 }
@@ -352,18 +260,42 @@ impl Step {
 
                 let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
 
-
                 match value {
                     None => {
-                        reg.delete("", false)?;
+
+
+                        let tree = Tree::from(&reg);
+
+
+
+                        reg.delete("", true)?; //Delete the contents of the key
+                        reg.delete_self(false)?; //Delete the key itself
+
+
+
+
+                        Ok(Some(Step::RestoreRegistryKey {
+                            root: root.clone(),
+                            key: key.clone(),
+                            tree,
+                        }))
                     }
                     Some(val) => {
+                        let old_value = reg.value(val)?;
+
                         reg.delete_value(val)?;
+
+                        Ok(Some(Step::WriteRegistryValue {
+                            root: root.clone(),
+                            key: key.clone(),
+                            value: val.clone(),
+                            data: Data::from(old_value)
+                        }))
                     }
                 }
 
 
-                Ok(None)
+
             }
             Step::WriteRegistryValue { root, key, value, data } => {
 
@@ -397,11 +329,61 @@ impl Step {
 
                 Ok(Some(inverse))
             }
-            Step::WriteRegistryKey { root, key, new } => {
+            Step::WriteRegistryKey { root, key } => {
 
-                let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
+                let reg = registry::Hive::from(root); //.open(key, Security::AllAccess)?;
 
-                reg.create(new, Security::AllAccess)?;
+
+
+                //Look for the oldest ancestor that was newly created as part of this call.
+                //For example, if a registry key looks like 'example\path\to\' before, and
+                //'example\path\to\demonstrate\inverse' after, then you want to delete 'example\path\to\demonstrate'
+                let common = {
+                    let ancestors = Path::new(key).ancestors().collect::<Vec<_>>();
+
+                    for ancestor in ancestors.iter() {
+                        let o = reg.open(ancestor.to_str().unwrap(), Security::Read);
+                        println!("an: {:?} {:?}", ancestor, o);
+                    }
+
+                    ancestors
+                        .iter()
+                        .rev()
+                        .map(|x| {
+
+                            let o= reg.open(x.to_str().unwrap(), Security::Read);
+
+                            (x.clone(), o)
+                        })
+                        .find(|(_, x)| x.is_err())
+                        .map(|(path, _)| path)
+                };
+
+                let inverse = common.map(|x| {
+                    Step::DeleteRegistryEntry {
+                        root: root.clone(),
+                        key: String::from(x.to_str().unwrap()),
+                        value: None
+                    }
+                });
+
+                reg.create(key, Security::AllAccess)?;
+
+                Ok(inverse)
+            }
+            Step::RestoreRegistryKey { root, key, tree } => {
+
+                let path = Path::new(key);
+
+                let mut anc = path.ancestors();
+
+                anc.next();
+
+                let path = anc.next().unwrap();
+
+
+
+                tree.restore(root, path.to_str().unwrap()).unwrap();
 
                 Ok(None)
             }

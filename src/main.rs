@@ -16,13 +16,14 @@ mod steps;
 mod command;
 mod vm;
 mod oak;
+mod registry_ex;
 
 use crate::error::Result;
 use std::fs::OpenOptions;
 use std::io::Read;
 use steps::{Step, SpecialPath, FileType};
 use command::Command;
-use crate::steps::{Data, RootKey};
+use crate::registry_ex::{Data, RootKey};
 
 ///Install from the `installer` file, and write the uninstaller to `uninstaller`
 fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
@@ -197,9 +198,15 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
 
                 let root = RootKey::from(tokens.next().unwrap());
                 let key = String::from(tokens.next().unwrap());
-                let new = String::from(tokens.next().unwrap());
 
-                command.push(Step::WriteRegistryKey { root, key, new })
+                command.push(Step::WriteRegistryKey { root, key })
+            }
+            "reg_delete_key" => {
+
+                let root = RootKey::from(tokens.next().unwrap());
+                let key = String::from(tokens.next().unwrap());
+
+                command.push(Step::DeleteRegistryEntry { root, key, value: None })
             }
             "end_command" => {
                 commands.push(Command(command));
@@ -220,6 +227,8 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
 }
 
 fn main() {
+
+
 
     let m = clap::Command::new(clap::crate_name!())
         .author(clap::crate_authors!())

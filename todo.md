@@ -1,6 +1,6 @@
 # Todo
 
-- Create inverses for `WriteRegistryKey` and `DeleteRegistryEntry`
+- Implement line edit step (using something like awk)
 - Ensure each step executes exactly as expected, and the inverses are correct
 - Add a more comprehensive Oak scripting language
   - A lexer to convert the script into a list of tokens
@@ -16,4 +16,4 @@
 - For all actions, swap out the main function with a wrapper, so that it can be replaced with a duimmy function.
   This means that at the flip of a variable, operations can be applied to a virtual machine, instead of 
   a real one while developing to protect the developer's computer.
-
+- Implement create shortcut
