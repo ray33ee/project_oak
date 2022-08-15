@@ -21,9 +21,11 @@ mod registry_ex;
 use crate::error::Result;
 use std::fs::OpenOptions;
 use std::io::Read;
-use steps::{Step, SpecialPath, FileType};
+use stack_vm::{Builder, Code, Machine, WriteManyTable};
+use steps::{Step, PathType, FileType};
 use command::Command;
 use crate::registry_ex::{Data, RootKey};
+use crate::vm::operand::Operand;
 
 ///Install from the `installer` file, and write the uninstaller to `uninstaller`
 fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> Result<()> {
@@ -138,11 +140,11 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
                 let name = PathBuf::from(tokens.next().unwrap());
                 let name = writer.archive(name);
                 println!("name: {}", name);
-                let destination = SpecialPath::from(tokens.next().unwrap());
+                let destination = PathType::from(tokens.next().unwrap());
                 command.push(Step::Data { name, destination });
             }
             "move" => {
-                let source = SpecialPath::from(tokens.next().unwrap());
+                let source = PathType::from(tokens.next().unwrap());
 
                 let destination = PathBuf::from(tokens.next().unwrap());
                 command.push(Step::Move { source, destination });
@@ -157,32 +159,32 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
                     "folder" | "dir" | "directory" => {FileType::Folder}
                     _ => {panic!("Invalid file type (must be 'file' or 'dir'")}
                 };
-                let path = SpecialPath::from(tokens.next().unwrap());
+                let path = PathType::from(tokens.next().unwrap());
                 command.push(Step::Create { path, f_type });
             }
             "copy" => {
-                let source = SpecialPath::from(tokens.next().unwrap());
-                let destination = SpecialPath::from(tokens.next().unwrap());
+                let source = PathType::from(tokens.next().unwrap());
+                let destination = PathType::from(tokens.next().unwrap());
                 command.push(Step::Copy { source, destination });
             }
             "download" => {
                 let url = String::from(tokens.next().unwrap());
-                let destination = SpecialPath::from(tokens.next().unwrap());
+                let destination = PathType::from(tokens.next().unwrap());
                 command.push(Step::Download { url, destination })
             }
             "rename" => {
-                let from = SpecialPath::from(tokens.next().unwrap());
-                let to = SpecialPath::from(tokens.next().unwrap());
+                let from = PathType::from(tokens.next().unwrap());
+                let to = PathType::from(tokens.next().unwrap());
                 command.push(Step::Rename { from, to });
             }
             "zip" => {
-                let folder = SpecialPath::from(tokens.next().unwrap());
-                let archive = SpecialPath::from(tokens.next().unwrap());
+                let folder = PathType::from(tokens.next().unwrap());
+                let archive = PathType::from(tokens.next().unwrap());
                 command.push(Step::Zip { folder, archive });
             }
             "unzip" => {
-                let folder = SpecialPath::from(tokens.next().unwrap());
-                let archive = SpecialPath::from(tokens.next().unwrap());
+                let folder = PathType::from(tokens.next().unwrap());
+                let archive = PathType::from(tokens.next().unwrap());
                 command.push(Step::Unzip { folder, archive });
             }
             "reg_write_value" => {
@@ -208,6 +210,12 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
 
                 command.push(Step::DeleteRegistryEntry { root, key, value: None })
             }
+            "sed" | "edit" => {
+                let source = PathType::from(tokens.next().unwrap());
+                let regex = String::from(tokens.next().unwrap());
+
+                command.push(Step::Edit { source, command: regex })
+            }
             "end_command" => {
                 commands.push(Command(command));
                 command = Vec::new();
@@ -227,6 +235,34 @@ fn create_installer<P: AsRef<Path>>(source_file: P, installer_path: P) -> Result
 }
 
 fn main() {
+
+    use vm::operand::Operand;
+
+    let table = vm::instructions::get_instruction_table();
+
+    let source_code = "\
+.main:
+    push p\"E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\file\\ttt.txt\"
+    push p\"E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\file\\replace.txt\"
+    move
+    ";
+
+    let code = Code::parse(source_code, &table);
+
+    println!("{:?}", code);
+
+    let data = vm::machine_data::Data::install("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\a.zip", "E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\b.zip");
+
+
+    let constants: WriteManyTable<Operand> = WriteManyTable::new();
+    let mut machine = Machine::new(code, &constants, &table, data);
+    machine.run();
+
+    let rel = machine.release();
+
+    println!("{:?}", rel.inverse);
+
+    return;
 
 
 

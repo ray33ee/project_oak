@@ -1,17 +1,20 @@
-
+use std::fmt::Formatter;
 use crate::error::{Result, Error};
 use crate::oak::OakRead;
 use crate::oak::OakWrite;
 use crate::registry_ex;
 
-use std::path::{Path, PathBuf};
+use std::path::{Display, Path, PathBuf};
 use std::fs::OpenOptions;
+use std::io::Write;
 use serde::{Serialize, Deserialize};
 use tempfile::TempDir;
 use registry::Security;
 use registry_ex::RootKey;
 use registry_ex::Data;
 use crate::registry_ex::Tree;
+
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FileType {
@@ -20,26 +23,28 @@ pub enum FileType {
     Shortcut(PathBuf),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum SpecialPath {
-    Path(PathBuf),
-    TemporaryFolder(PathBuf),
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+pub enum PathType {
+    Absolute(PathBuf),
+    Temporary(PathBuf),
 }
 
-impl SpecialPath {
+impl PathType {
     pub fn path(&self, temp: Option<&TempDir>) -> PathBuf {
         match self {
-            SpecialPath::Path(path) => {
+            PathType::Absolute(path) => {
                 path.clone()
             }
-            SpecialPath::TemporaryFolder(path) => {
+            PathType::Temporary(path) => {
                 temp.unwrap().path().join(path)
             }
         }
+
+
     }
 
     pub fn is_temp(&self) -> bool {
-        if let SpecialPath::Path(_) = self {
+        if let PathType::Absolute(_) = self {
             false
         } else {
             true
@@ -47,14 +52,23 @@ impl SpecialPath {
     }
 }
 
-impl From<&str>  for  SpecialPath {
+impl std::fmt::Display for PathType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PathType::Absolute(p) => {write!(f, "{}", p.to_str().unwrap())}
+            PathType::Temporary(p) => {write!(f, "$TEMP_DIR\\{}", p.to_str().unwrap())}
+        }
+    }
+}
+
+impl From<&str>  for PathType {
     fn from(string: &str) -> Self {
         let key = "temp";
 
         if string.starts_with(key) {
-            SpecialPath::TemporaryFolder(PathBuf::from(&string[key.len()..]).strip_prefix("\\").unwrap().to_path_buf())
+            PathType::Temporary(PathBuf::from(&string[key.len()..]).strip_prefix("\\").unwrap().to_path_buf())
         } else {
-            SpecialPath::Path(PathBuf::from(string))
+            PathType::Absolute(PathBuf::from(string))
         }
     }
 }
@@ -62,20 +76,21 @@ impl From<&str>  for  SpecialPath {
 ///A step is the smallest unit of an installation process
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Step {
-    Data{ name: String, destination: SpecialPath },
-    Move{ source: SpecialPath, destination: PathBuf },
+    Data{ name: String, destination: PathType },
+    Move{ source: PathType, destination: PathBuf },
     Delete { path: PathBuf },
-    Create { path: SpecialPath, f_type: FileType },
-    Copy { source: SpecialPath, destination: SpecialPath },
-    Rename { from: SpecialPath, to: SpecialPath },
-    Zip { folder: SpecialPath, archive: SpecialPath },
-    Unzip { folder: SpecialPath, archive: SpecialPath },
+    Create { path: PathType, f_type: FileType },
+    Copy { source: PathType, destination: PathType },
+    Rename { from: PathType, to: PathType },
+    Zip { folder: PathType, archive: PathType },
+    Unzip { folder: PathType, archive: PathType },
     DeleteRegistryEntry { root: RootKey, key: String, value: Option<String> },
     WriteRegistryValue { root: RootKey, key: String, value: String, data: Data },
     WriteRegistryKey { root: RootKey, key: String },
     RestoreRegistryKey { root: RootKey, key: String, tree: Tree }, //Used only as the inverse of a DeleteRegistry key
-    Download { url: String, destination: SpecialPath },
-    //Edit{ source: SpecialPath }, //- Edit a text file using something like sed or awk. Inverse should be to restore the original file
+    Download { url: String, destination: PathType },
+    Edit{ source: PathType, command: String },
+    RestoreEdit { name: String, destination: PathType }, //Used only as inverse of edit
     Print { message: String },
     Panic,
 }
@@ -130,10 +145,10 @@ impl Step {
                     }
 
                     match source {
-                        SpecialPath::Path(s) => {
-                            Ok(Some(Step::Move { source: SpecialPath::Path(destination.clone()), destination: s.clone() }))
+                        PathType::Absolute(s) => {
+                            Ok(Some(Step::Move { source: PathType::Absolute(destination.clone()), destination: s.clone() }))
                         }
-                        SpecialPath::TemporaryFolder(_) => {
+                        PathType::Temporary(_) => {
 
                             Ok(Some(Step::Delete { path: destination.clone() }))
                         }
@@ -159,7 +174,7 @@ impl Step {
                 };
 
                 if let Some(_) = uninstall_archive {
-                    Ok(Some(Step::Data { name: name.unwrap(), destination: SpecialPath::Path(path.clone()) }))
+                    Ok(Some(Step::Data { name: name.unwrap(), destination: PathType::Absolute(path.clone()) }))
                 } else {
                     Ok(None)
                 }
@@ -252,7 +267,7 @@ impl Step {
                 if archive.is_temp() {
                     Ok(None)
                 } else {
-                    Ok(Some(Step::Delete { path: archive.path(temp) }))
+                    Ok(Some(Step::Delete { path: folder.path(temp) }))
                 }
 
             }
@@ -384,6 +399,45 @@ impl Step {
 
 
                 tree.restore(root, path.to_str().unwrap()).unwrap();
+
+                Ok(None)
+            }
+            Step::Edit { source, command } => {
+
+                let name = match uninstall_archive.as_mut() {
+                    None => { None }
+                    Some(archive) => {Some(archive.archive(&source.path(temp)))}
+                };
+
+
+                //Load `source`
+                let content = std::fs::read_to_string(source.path(temp))?;
+
+                println!("before: {}", content);
+
+                //Perform find and replace
+                let res = sedregex::find_and_replace(content.as_str(), &[command]).unwrap();
+
+                println!("after: {}", res.as_ref());
+
+                //Save back to `source`
+                let mut fh = OpenOptions::new().write(true).open(source.path(temp))?;
+
+                fh.write_all(res.as_ref().as_bytes())?;
+
+                if source.is_temp() {
+                    Ok(None)
+                } else {
+                    Ok(Some(Step::RestoreEdit { name: name.unwrap(), destination: source.clone() }))
+                }
+            }
+            Step::RestoreEdit { name, destination } => {
+
+                let destination_path = destination.path(temp);
+
+                std::fs::remove_file(&destination_path)?;
+
+                install_archive.extract(&name, &destination_path)?;
 
                 Ok(None)
             }

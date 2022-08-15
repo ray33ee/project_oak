@@ -1,4 +1,3 @@
-use std::error;
 use std::path::Path;
 use registry::{RegKey, Security};
 use serde::{Serialize, Deserialize};

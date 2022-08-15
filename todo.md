@@ -1,6 +1,5 @@
 # Todo
 
-- Implement line edit step (using something like awk)
 - Ensure each step executes exactly as expected, and the inverses are correct
 - Add a more comprehensive Oak scripting language
   - A lexer to convert the script into a list of tokens

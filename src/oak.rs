@@ -50,6 +50,8 @@ impl OakRead {
 
             Ok(())
         } else {
+            //Create constraint has been removed for the inverse of the Edit step, which restores a file from an oak archive
+            //and replace the original file
             let mut dfile = OpenOptions::new().write(true).create(true).open(destination)?;
             std::io::copy(& mut afile, & mut dfile)?;
 
