@@ -1,7 +1,6 @@
 
 use stack_vm::{Instruction, InstructionTable, Machine};
 use crate::vm::operand::Operand;
-use std::path::{PathBuf};
 use crate::PathType;
 use crate::vm::machine_data::Data;
 
@@ -53,7 +52,7 @@ fn add(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
     let a = machine.operand_pop();
     let b = machine.operand_pop();
 
-    machine.operand_push(a.try_add(&b).unwrap_or_else(|_| panic!("Oak Script Error: Cannot add specified operands {} and {}", a, b)))
+    machine.operand_push(a.try_add(&b).unwrap_or_else(|_| panic!("Oak Script Error: Cannot add specified operands {:?} and {:?}", a, b)))
 }
 
 /* Control flow operations */
@@ -64,7 +63,7 @@ fn jmp(machine: & mut Machine<Operand, Data>, args: &[usize]) {
     if let Operand::String(str) = arg {
         machine.jump(&str);
     } else {
-        panic!("Oak Script Error: jmp operand must be a literal string label ({})", arg)
+        panic!("Oak Script Error: jmp operand must be a literal string label ({:?})", arg)
     }
 }
 
@@ -81,7 +80,7 @@ fn call(machine: & mut Machine<Operand, Data>, args: &[usize]) {
     if let Operand::String(str) = arg {
         machine.call(&str);
     } else {
-        panic!("Oak Script Error: call operand must be a literal string label ({})", arg)
+        panic!("Oak Script Error: call operand must be a literal string label ({:?})", arg)
     }
 }
 
@@ -91,8 +90,8 @@ fn ret(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
 /* Install/uninstall steps */
 
-fn data(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
-    let name = machine.operand_pop();
+fn data(machine: & mut Machine<Operand, Data>, args: &[usize]) {
+    let name = machine.get_data(args[0]).clone();
     let destination = PathType::try_from(machine.operand_pop()).unwrap();
 
     let destination_path = destination.path(machine.data().temp.as_ref());
@@ -230,9 +229,9 @@ fn copy(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
 
 // Not actually an instruction, it is instead used by the other create methods
-fn create(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+/*fn create(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
-}
+}*/
 
 fn rename(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
@@ -331,11 +330,13 @@ pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
 
     table.insert(Instruction::new(300, "add", 0, add));
 
-    table.insert(Instruction::new(400, "data", 0, data));
+    table.insert(Instruction::new(400, "data", 1, data));
     table.insert(Instruction::new(401, "copy", 0, copy));
     table.insert(Instruction::new(402, "delete", 0, delete));
     table.insert(Instruction::new(403, "move", 0, _move));
     table.insert(Instruction::new(404, "rename", 0, rename));
+    table.insert(Instruction::new(405, "zip", 0, zip));
+    table.insert(Instruction::new(406, "unzip", 0, unzip));
 
     table
 

@@ -615,10 +615,12 @@ dependencies = [
 
 [[package]]
 name = "project_oak"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "clap",
  "fs_extra",
+ "lazy_static",
+ "regex",
  "registry",
  "reqwest",
  "sedregex",

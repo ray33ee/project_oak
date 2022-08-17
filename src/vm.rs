@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 
 pub mod operand;
 pub mod instructions;

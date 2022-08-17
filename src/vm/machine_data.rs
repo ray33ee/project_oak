@@ -1,5 +1,4 @@
 use std::path::Path;
-use stack_vm::{Builder, Code, Instruction, InstructionTable};
 use tempfile::TempDir;
 use crate::{OakRead, OakWrite};
 use crate::vm::operand::Operand;
@@ -29,7 +28,7 @@ impl Data {
 
     }
 
-    pub fn uninstall(uninstaller: &Path) -> Self {
+    pub fn uninstall<P: AsRef<Path>>(uninstaller: P) -> Self {
         let uninstall_archive =  OakRead::new(uninstaller).unwrap();
 
         Self {
@@ -42,7 +41,7 @@ impl Data {
 
     //If a function fails in the machine, this function should be called to clean up, and to
     //Undo any installation steps taken if this is an installer
-    pub fn revers(&self) {
+    pub fn reverse(&self) {
 
     }
 

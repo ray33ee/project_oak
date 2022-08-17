@@ -4,7 +4,7 @@ use crate::oak::OakRead;
 use crate::oak::OakWrite;
 use crate::registry_ex;
 
-use std::path::{Display, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::fs::OpenOptions;
 use std::io::Write;
 use serde::{Serialize, Deserialize};
@@ -23,7 +23,7 @@ pub enum FileType {
     Shortcut(PathBuf),
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum PathType {
     Absolute(PathBuf),
     Temporary(PathBuf),
@@ -52,11 +52,11 @@ impl PathType {
     }
 }
 
-impl std::fmt::Display for PathType {
+impl std::fmt::Debug for PathType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PathType::Absolute(p) => {write!(f, "{}", p.to_str().unwrap())}
-            PathType::Temporary(p) => {write!(f, "$TEMP_DIR\\{}", p.to_str().unwrap())}
+            PathType::Absolute(p) => {write!(f, "p\"{}\"", p.to_str().unwrap())}
+            PathType::Temporary(p) => {write!(f, "t\"{}\"", p.to_str().unwrap())}
         }
     }
 }

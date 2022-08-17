@@ -2,11 +2,10 @@
 use zip::{ZipArchive, ZipWriter};
 use std::path::{Path, PathBuf};
 use std::fs::OpenOptions;
-use crate::command::Command;
 use zip::write::FileOptions;
 use crate::error::{Result};
 use zip_extensions::{ZipWriterExtensions};
-use std::io::{Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 ///A struct used to read an oak archive
 pub struct OakRead {
@@ -23,9 +22,11 @@ impl OakRead {
     }
 
     ///Get the list of commands stored in the archive
-    pub fn commands(& mut self) -> Result<Vec<Command>> {
+    pub fn commands(& mut self) -> Result<String> {
         //bincode::deserialize_from(self.archive.by_name("_command").unwrap()).unwrap()
-        Ok(serde_json::from_reader(self.archive.by_name("_commands")?)?)
+        let mut res = String::new();
+        self.archive.by_name("_commands")?.read_to_string(& mut res)?;
+        Ok(res)
     }
 
     ///Extract the specified file `name` to `destination`
@@ -120,10 +121,9 @@ impl OakWrite {
     }
 
     ///Write the commands list to the archive
-    pub fn commands(& mut self, commands: & Vec<Command>) {
+    pub fn commands(& mut self, commands: & str) {
         self.archive.start_file(format!("_commands"), FileOptions::default()).unwrap();
-        //bincode::serialize_into(& mut self.archive, commands).unwrap();
-        serde_json::to_writer(& mut self.archive, commands).unwrap()
+        self.archive.write_all(commands.as_bytes()).unwrap();
     }
 
     /*

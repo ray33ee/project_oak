@@ -1,10 +1,9 @@
-use std::fmt::{Display, Formatter};
-use std::ops::Add;
-use std::path::{Path, PathBuf};
+use std::fmt::{Formatter};
+use std::path::{PathBuf};
 use tempfile::TempDir;
 use crate::steps::PathType;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum Operand {
     Null,
     I64(i64),
@@ -42,14 +41,14 @@ impl From<&str> for Operand {
     }
 }
 
-impl std::fmt::Display for Operand {
+impl std::fmt::Debug for Operand {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Operand::Null => {write!(f, "null")}
             Operand::I64(n) => {write!(f, "{}", n)}
-            Operand::String(str) => {write!(f, "{}", str)}
+            Operand::String(str) => {write!(f, "\"{}\"", str)}
             Operand::Bool(b) => {write!(f, "{}", b)}
-            Operand::Path(path) => {write!(f, "{}", path)}
+            Operand::Path(path) => {write!(f, "{:?}", path)}
         }
     }
 }
@@ -107,8 +106,8 @@ impl Operand {
             Operand::Bool(_) => {
                 panic!("Oak Script Error: Cannot add 'bool' to values");
             }
-            Operand::Path(p) => {
-                if let Operand::Path(r) = rhs {
+            Operand::Path(_) => {
+                if let Operand::Path(_) = rhs {
                     todo!()
 
                 }
@@ -124,7 +123,7 @@ impl Operand {
             Operand::I64(n) => { *n != 0 }
             Operand::String(str) => { !str.is_empty() }
             Operand::Bool(b) => {*b}
-            Operand::Path(p) => {
+            Operand::Path(_) => {
 
                 panic!("Oak Script Error: Cannot convert path to boolean");
             }

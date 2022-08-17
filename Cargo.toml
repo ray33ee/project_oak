@@ -1,6 +1,6 @@
 [package]
 name = "project_oak"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 description = "Proof of concept for a action/inverse and step/command based installer and inferred uninstaller"
 
@@ -18,4 +18,6 @@ tempfile = "3.3.0"
 clap = {version = "3.1.5", features = ["cargo"]}
 registry = "1.2.2"
 sedregex = "0.2.5"
-stack-vm = { version = "1.0.1", git = "https://github.com/ray33ee/stack-vm" }
+stack-vm = { version = "1.0.3", git = "https://github.com/ray33ee/stack-vm" }
+regex = "1.6.0"
+lazy_static = "1.4.0"
