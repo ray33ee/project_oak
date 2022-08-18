@@ -84,9 +84,12 @@ pub enum Step {
     Rename { from: PathType, to: PathType },
     Zip { folder: PathType, archive: PathType },
     Unzip { folder: PathType, archive: PathType },
+
     DeleteRegistryEntry { root: RootKey, key: String, value: Option<String> },
+
     WriteRegistryValue { root: RootKey, key: String, value: String, data: Data },
     WriteRegistryKey { root: RootKey, key: String },
+
     RestoreRegistryKey { root: RootKey, key: String, tree: Tree }, //Used only as the inverse of a DeleteRegistry key
     Download { url: String, destination: PathType },
     Edit{ source: PathType, command: String },

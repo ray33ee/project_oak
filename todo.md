@@ -1,6 +1,25 @@
 # Todo
 
-- Ensure each step executes exactly as expected, and the inverses are correct
+- Add functionality for the delete registry entry
+  - Do this by recursively adding write reg value/key instructions to the inverse
+- Make sure a failed install:
+  - unwinds correctly
+  - stops the vm
+- Add flags to any commands with multiplicity (see NSIS commands)
+- Implement create shortcut
+- Add a SHIT ton of tests (use a tempdir for this, and create files filled with garbage)
+  - Test the following:
+    - Variants for each `PathType`
+    - More complex iunstallers
+    - Convert code to string and back again, compare code or strings to test compiler
+- Think about error handling
+  - Oak Script errors: Wrong type of argument, for example. non-recoverable
+  - Runtime errors: Invalid permissions error. Recoverable
+- Add features to stack_vm to
+  - Peek and poke at an arbitrary item on the stack via an address
+  - Get the stack after `Machine::run` via `Machine::release`
+  - Possibly add a `Machine::Stop` function that supplies a stop reason
+- Convert specs list into a table with 3 columns, step name, action and inverse
 - Add a more comprehensive Oak scripting language
   - A lexer to convert the script into a list of tokens
   - Take that list of tokens and convert into an AST
@@ -11,8 +30,3 @@
   - Create python/gdscript style syntax
   - Function to add the uninstaller to a path, and add this to the registry
     - Function to check to see if already installed
-- Convert specs list into a table with 3 columns, step name, action and inverse
-- For all actions, swap out the main function with a wrapper, so that it can be replaced with a duimmy function.
-  This means that at the flip of a variable, operations can be applied to a virtual machine, instead of 
-  a real one while developing to protect the developer's computer.
-- Implement create shortcut

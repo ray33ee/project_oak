@@ -77,6 +77,20 @@ impl TryFrom<Operand> for String {
     }
 }
 
+impl TryFrom<Operand> for registry::Data {
+    type Error = ();
+
+    fn try_from(value: Operand) -> Result<Self, Self::Error> {
+        match value {
+            Operand::Null => {Ok(registry::Data::None)}
+            Operand::I64(n) => {Ok(registry::Data::U32(n as u32))}
+            Operand::String(s) => {Ok(registry::Data::String(s.parse().unwrap()))}
+            Operand::Bool(_) => {Err(())}
+            Operand::Path(_) => {Err(())}
+        }
+    }
+}
+
 impl Operand {
 
     pub fn same_type(&self, rhs: &Operand) -> bool {

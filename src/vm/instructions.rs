@@ -1,7 +1,9 @@
-
+use std::path::Path;
+use registry::Security;
 use stack_vm::{Instruction, InstructionTable, Machine};
 use crate::vm::operand::Operand;
 use crate::PathType;
+use crate::registry_ex::RootKey;
 use crate::vm::machine_data::Data;
 
 /* Stack operations */
@@ -179,8 +181,7 @@ fn delete(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
         if let Some(list) = & mut machine.data().inverse {
 
             list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(path.clone()))]));
-            list.insert(1, (String::from("push"), vec![Operand::String(name.unwrap())]));
-            list.insert(2, (String::from("data"), vec![]));
+            list.insert(1, (String::from("data"), vec![Operand::String(name.unwrap())]));
 
         }
 
@@ -313,6 +314,176 @@ fn unzip(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 }
 
 
+fn download(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+
+
+    let url = String::try_from(machine.operand_pop()).unwrap();
+    let destination = PathType::try_from(machine.operand_pop()).unwrap();
+
+    let response = reqwest::blocking::get(url).unwrap();
+
+    let temp= machine.data().temp.as_ref();
+
+    let file_name = if destination.path(temp).is_dir() {
+        let fname = response
+            .url()
+            .path_segments()
+            .and_then(|segments| segments.last())
+            .and_then(|name| if name.is_empty() {None} else {Some(name)})
+            .unwrap_or("tmp.bin");
+
+        destination.path(temp).join(fname)
+    } else if destination.path(temp).is_file() {
+        destination.path(temp)
+    } else {
+        panic!("Download destination must be a directory or file")
+    };
+
+    let mut dest = std::fs::File::create(file_name.clone()).unwrap();
+
+    let content = response.text().unwrap();
+    std::io::copy(&mut content.as_bytes(), &mut dest).unwrap();
+
+    if !destination.is_temp() {
+
+        if let Some(list) = & mut machine.data().inverse {
+
+            list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(file_name))]));
+            list.insert(1, (String::from("delete"), vec![]));
+
+        }
+        //Ok(Some(Step::Delete { path: file_name }))
+    }
+
+}
+
+fn edit(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+
+    use std::io::Write;
+
+    let command = String::try_from(machine.operand_pop()).unwrap();
+
+    let s = PathType::try_from(machine.operand_pop()).unwrap();
+
+    let source = s.path(machine.data().temp.as_ref());
+
+    let name = match machine.data().uninstall_archive.as_mut() {
+        None => { None }
+        Some(archive) => {Some(archive.archive(&source))}
+    };
+
+
+    //Load `source`
+    let content = std::fs::read_to_string(source.as_path()).unwrap();
+
+
+    //Perform find and replace
+    let res = sedregex::find_and_replace(content.as_str(), &[command]).unwrap();
+
+
+    //Save back to `source`
+    let mut fh = std::fs::OpenOptions::new().write(true).open(source.as_path()).unwrap();
+
+    fh.write_all(res.as_ref().as_bytes()).unwrap();
+
+    if !s.is_temp() {
+
+
+        if let Some(list) = & mut machine.data().inverse {
+            list.insert(0, (String::from("push"), vec![Operand::Path(s.clone())]));
+            list.insert(1, (String::from("delete"), vec![]));
+
+
+            list.insert(2, (String::from("push"), vec![Operand::Path(s.clone())]));
+            list.insert(3, (String::from("data"), vec![Operand::String(name.unwrap())]));
+        }
+
+        //Ok(Some(Step::RestoreEdit { name: name.unwrap(), destination: source.clone() }))
+    }
+}
+
+
+fn write_reg_key(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+
+
+    let root = String::try_from(machine.operand_pop()).unwrap();
+    let key = String::try_from(machine.operand_pop()).unwrap();
+
+    let reg = registry::Hive::from(&RootKey::from(root.as_str())); //.open(key, Security::AllAccess)?;
+
+
+
+    //Look for the oldest ancestor that was newly created as part of this call.
+    //For example, if a registry key looks like 'example\path\to\' before, and
+    //'example\path\to\demonstrate\inverse' after, then you want to delete 'example\path\to\demonstrate'
+    let common = {
+        let ancestors = Path::new(key.as_str()).ancestors().collect::<Vec<_>>();
+
+        ancestors
+            .iter()
+            .rev()
+            .map(|x| {
+
+                let o= reg.open(x.to_str().unwrap(), Security::Read);
+
+                (x.clone(), o)
+            })
+            .find(|(_, x)| x.is_err())
+            .map(|(path, _)| path)
+    };
+
+    /*let inverse = common.map(|x| {
+        Step::DeleteRegistryEntry {
+            root: root.clone(),
+            key: String::from(x.to_str().unwrap()),
+            value: None
+        }[0,
+    });*/
+
+    reg.create(key.as_str(), Security::AllAccess).unwrap();
+
+    //Ok(inverse)
+}
+
+
+fn write_reg_value(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+
+
+    let root = String::try_from(machine.operand_pop()).unwrap();
+    let key = String::try_from(machine.operand_pop()).unwrap();
+    let value = String::try_from(machine.operand_pop()).unwrap();
+    let data = registry::Data::try_from(machine.operand_pop()).unwrap();
+
+    let reg = registry::Hive::from(&RootKey::from(root.as_str())).open(key, Security::AllAccess).unwrap();
+
+    println!("reg: {}", reg);
+
+    //For inverses, there are two cases. If the value already exists (i.e. we are modifying it)
+    //and if the value does not already exist (i.e. we are creating it). In the first case,
+    //the inverse is to revert to the previous value. In the second case, the inverse is
+    //to delete the value.
+    /*let inverse = if let Err(registry::value::Error::NotFound(_,_)) = reg.value(value) {
+        Step::DeleteRegistryEntry {
+            root: root.clone(),
+            key: key.clone(),
+            value: Some(value.clone()),
+        }
+    } else {
+        //Save the old value
+        let old_value = reg.value(value)?;
+
+        Step::WriteRegistryValue {
+            root: root.clone(),
+            key: key.clone(),
+            value: value.clone(),
+            data: Data::from(old_value)
+        }
+    };*/
+
+    reg.set_value(value, &data).unwrap();
+
+    //Ok(Some(inverse))
+}
 
 pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
 
@@ -337,6 +508,10 @@ pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
     table.insert(Instruction::new(404, "rename", 0, rename));
     table.insert(Instruction::new(405, "zip", 0, zip));
     table.insert(Instruction::new(406, "unzip", 0, unzip));
+    table.insert(Instruction::new(407, "download", 0, download));
+    table.insert(Instruction::new(408, "edit", 0, edit));
+    table.insert(Instruction::new(409, "reg_write_key", 0, write_reg_key));
+    table.insert(Instruction::new(410, "reg_write_value", 0, write_reg_value));
 
     table
 
