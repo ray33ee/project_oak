@@ -2,6 +2,7 @@
 mod tests {
     use std::io::Write;
     use std::path::Path;
+    use registry::{Hive, Security};
     use tempfile::TempDir;
     use crate::hlc;
 
@@ -395,19 +396,19 @@ clap=\"1\"";
 
 
 
-        generic_test(|working_path| {
+        generic_test(|_working_path| {
 
             format!("
 .main
     push \"SOFTWARE\\key_test\"
     push \"hklm\"
     reg_write_key")
-        }, |working_path|{
+        }, |_working_path|{
 
             Hive::LocalMachine.open("SOFTWARE\\key_test", Security::Read).unwrap();
 
 
-        }, |working_path|{
+        }, |_working_path|{
 
             Hive::LocalMachine.open("SOFTWARE\\key_test", Security::Read).err().unwrap();
 
@@ -423,7 +424,7 @@ clap=\"1\"";
 
         rkey.create("val_test", Security::AllAccess).unwrap();
 
-        generic_test(|working_path| {
+        generic_test(|_working_path| {
 
 
             format!("
@@ -433,7 +434,7 @@ clap=\"1\"";
     push \"SOFTWARE\\val_test\"
     push \"hklm\"
     reg_write_value")
-        }, |working_path|{
+        }, |_working_path|{
 
             let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test", Security::AllAccess).unwrap();
 
@@ -445,7 +446,7 @@ clap=\"1\"";
                 panic!("Data not a number");
             }
 
-        }, |working_path|{
+        }, |_working_path|{
 
             let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test", Security::AllAccess).unwrap();
 
@@ -461,6 +462,142 @@ clap=\"1\"";
                 }
             }
 
+
+        });
+
+    }
+
+    #[test]
+    fn instruction_reg_write_val2() {
+
+
+        let rkey = Hive::LocalMachine.open("SOFTWARE", Security::AllAccess).unwrap();
+
+        let bkey = rkey.create("val_test2", Security::AllAccess).unwrap();
+
+        bkey.set_value("val_name", &registry::Data::U32(400)).unwrap();
+
+        generic_test(|_working_path| {
+
+
+            format!("
+.main
+    push 100
+    push \"val_name\"
+    push \"SOFTWARE\\val_test2\"
+    push \"hklm\"
+    reg_write_value")
+        }, |_working_path|{
+
+            let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test2", Security::AllAccess).unwrap();
+
+            let val = rkey.value("val_name").unwrap();
+
+            if let registry::Data::U32(n) = val {
+                assert_eq!(n, 100);
+            } else {
+                panic!("Data not a number");
+            }
+
+        }, |_working_path|{
+
+            let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test2", Security::AllAccess).unwrap();
+
+
+            let val = rkey.value("val_name").unwrap();
+
+            if let registry::Data::U32(n) = val {
+                assert_eq!(n, 400);
+            } else {
+                panic!("Data not a number");
+            }
+
+
+        });
+
+        bkey.delete("", true).unwrap();
+        bkey.delete_self(false).unwrap();
+    }
+
+    #[test]
+    fn instruction_reg_delete_val() {
+
+
+        let rkey = Hive::LocalMachine.open("SOFTWARE", Security::AllAccess).unwrap();
+
+        let bkey = rkey.create("val_test_delete", Security::AllAccess).unwrap();
+
+        bkey.set_value("f", &registry::Data::U32(400)).unwrap();
+
+        generic_test(|_working_path| {
+
+
+            format!("
+.main
+    push \"f\"
+    push \"SOFTWARE\\val_test_delete\"
+    push \"hklm\"
+    reg_delete_value")
+        }, |_working_path|{
+            let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test_delete", Security::AllAccess).unwrap();
+
+            assert!(rkey.value("f").is_err())
+
+
+        }, |_working_path|{
+
+
+            let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test_delete", Security::AllAccess).unwrap();
+
+            let val = rkey.value("f").unwrap();
+
+            if let registry::Data::U32(n) = val {
+                assert_eq!(n, 400);
+            } else {
+                panic!("Data not a number");
+            }
+
+
+        });
+
+        bkey.delete("", true).unwrap();
+        bkey.delete_self(false).unwrap();
+
+    }
+
+
+    #[test]
+    fn instruction_reg_delete_key() {
+
+
+        let rkey = Hive::LocalMachine.open("SOFTWARE", Security::AllAccess).unwrap();
+
+        let rkey = rkey.create("instruction_reg_delete_key", Security::AllAccess).unwrap();
+
+        let rkey = rkey.create("inner", Security::AllAccess).unwrap();
+
+        rkey.set_value("val", &registry::Data::U32(500)).unwrap();
+
+        generic_test(|_working_path| {
+
+            format!("
+.main
+    push \"SOFTWARE\\instruction_reg_delete_key\"
+    push \"hklm\"
+    reg_delete_key")
+        }, |_working_path|{
+
+            Hive::LocalMachine.open("SOFTWARE\\instruction_reg_delete_key\\inner", Security::Read).err().unwrap();
+
+        }, |_working_path|{
+
+            let key = Hive::LocalMachine.open("SOFTWARE\\instruction_reg_delete_key\\inner", Security::Read).unwrap();
+
+            if let registry::Data::U32(500) = key.value("val").unwrap() {
+
+            } else {
+                panic!("Invalid registry data");
+            }
 
         });
 

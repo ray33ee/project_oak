@@ -11,18 +11,15 @@ extern crate registry;
 
 use std::path::{Path};
 use oak::{OakRead, OakWrite};
-use error::Error;
 
 mod error;
-mod steps;
-mod command;
 mod vm;
 mod oak;
 mod registry_ex;
 mod hlc;
 mod tests;
 
-use steps::{PathType};
+use crate::vm::operand::{PathType};
 
 fn main() {
 

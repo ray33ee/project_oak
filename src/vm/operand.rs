@@ -1,23 +1,79 @@
 use std::fmt::{Formatter};
 use std::path::{PathBuf};
+use registry::Data;
 use tempfile::TempDir;
-use crate::steps::PathType;
+
+#[derive(PartialEq, Eq, Clone)]
+pub enum PathType {
+    Absolute(PathBuf),
+    Temporary(PathBuf),
+}
+
+impl PathType {
+    pub fn path(&self, temp: Option<&TempDir>) -> PathBuf {
+        match self {
+            PathType::Absolute(path) => {
+                path.clone()
+            }
+            PathType::Temporary(path) => {
+                temp.unwrap().path().join(path)
+            }
+        }
+
+
+    }
+
+    pub fn is_temp(&self) -> bool {
+        if let PathType::Absolute(_) = self {
+            false
+        } else {
+            true
+        }
+    }
+}
+
+impl std::fmt::Debug for PathType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PathType::Absolute(p) => {write!(f, "p\"{}\"", p.to_str().unwrap())}
+            PathType::Temporary(p) => {write!(f, "t\"{}\"", p.to_str().unwrap())}
+        }
+    }
+}
+
+impl From<&str>  for PathType {
+    fn from(string: &str) -> Self {
+        let key = "temp";
+
+        if string.starts_with(key) {
+            PathType::Temporary(PathBuf::from(&string[key.len()..]).strip_prefix("\\").unwrap().to_path_buf())
+        } else {
+            PathType::Absolute(PathBuf::from(string))
+        }
+    }
+}
+
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum Operand {
-    Null,
-    I64(i64),
-    String(String),
-    Bool(bool),
-    Path(PathType),
-    //Array(Vec<Operand>),
+    Null, //From string: literal 'null'
+    I64(i64), //From String: literal number
+    String(String), //From String: quote-enclosed string
+    Bool(bool), //From String: literal 'true' or 'false'
+    Path(PathType), //From String: Quote enclosed string prefixed with 'p' for absolute path or 't' for temporary
+    //Array(Vec<Operand>), //From String: List of Operands separated by commas and enclosed in '[' and ']'
+
+    //Registry data types
+    //Binary(Vec<u8>), // From String: quote enclosed string prefixed with 'b'
+    //MultiString(Vec<String>),
+    //Expanded(String), // From String: quote enclosed string prefixed with 'e'
 }
 
-impl Default for Operand {
+/*impl Default for Operand {
     fn default() -> Self {
         Operand::Null
     }
-}
+}*/
 
 impl From<&str> for Operand {
     fn from(str: &str) -> Self {
@@ -87,6 +143,21 @@ impl TryFrom<Operand> for registry::Data {
             Operand::String(s) => {Ok(registry::Data::String(s.parse().unwrap()))}
             Operand::Bool(_) => {Err(())}
             Operand::Path(_) => {Err(())}
+        }
+    }
+}
+
+impl TryFrom<registry::Data> for Operand {
+    type Error = ();
+
+    fn try_from(value: Data) -> Result<Self, Self::Error> {
+        match value {
+            Data::None => {Ok(Operand::Null)}
+            Data::String(s) => {Ok(Operand::String(s.to_string_lossy()))}
+            Data::ExpandString(s) => {Ok(Operand::String(s.to_string_lossy()))}
+            Data::U32(n) => {Ok(Operand::I64(n as i64))}
+            Data::U64(n) => {Ok(Operand::I64(n as i64))}
+            _ => Err(())
         }
     }
 }

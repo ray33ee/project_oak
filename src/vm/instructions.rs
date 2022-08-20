@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path};
 use registry::Security;
 use stack_vm::{Instruction, InstructionTable, Machine};
 use crate::vm::operand::Operand;
@@ -432,17 +432,16 @@ fn write_reg_key(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
             .map(|(path, _)| path)
     };
 
-    /*let inverse = common.map(|x| {
-        Step::DeleteRegistryEntry {
-            root: root.clone(),
-            key: String::from(x.to_str().unwrap()),
-            value: None
-        }[0,
-    });*/
+    if let Some(p) = common {
+        if let Some(list) = &mut machine.data().inverse {
+            list.insert(0, (String::from("push"), vec![Operand::String(String::from(p.to_str().unwrap()))]));
+            list.insert(1, (String::from("push"), vec![Operand::String(root.clone())]));
+            list.insert(2, (String::from("reg_delete_key"), vec![]));
+        }
+    }
 
     reg.create(key.as_str(), Security::AllAccess).unwrap();
 
-    //Ok(inverse)
 }
 
 
@@ -454,35 +453,113 @@ fn write_reg_value(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
     let value = String::try_from(machine.operand_pop()).unwrap();
     let data = registry::Data::try_from(machine.operand_pop()).unwrap();
 
-    let reg = registry::Hive::from(&RootKey::from(root.as_str())).open(key, Security::AllAccess).unwrap();
-
-    println!("reg: {}", reg);
+    let reg = registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess).unwrap();
 
     //For inverses, there are two cases. If the value already exists (i.e. we are modifying it)
     //and if the value does not already exist (i.e. we are creating it). In the first case,
     //the inverse is to revert to the previous value. In the second case, the inverse is
     //to delete the value.
-    /*let inverse = if let Err(registry::value::Error::NotFound(_,_)) = reg.value(value) {
-        Step::DeleteRegistryEntry {
-            root: root.clone(),
-            key: key.clone(),
-            value: Some(value.clone()),
-        }
-    } else {
-        //Save the old value
-        let old_value = reg.value(value)?;
 
-        Step::WriteRegistryValue {
-            root: root.clone(),
-            key: key.clone(),
-            value: value.clone(),
-            data: Data::from(old_value)
+    if let Some(list) = &mut machine.data().inverse {
+        if let Err(registry::value::Error::NotFound(_,_)) = reg.value(value.as_str()) {
+
+            list.insert(0, (String::from("push"), vec![Operand::String(value.clone())]));
+            list.insert(1, (String::from("push"), vec![Operand::String(key.clone())]));
+            list.insert(2, (String::from("push"), vec![Operand::String(root.clone())]));
+            list.insert(3, (String::from("reg_delete_value"), vec![]));
+        } else {
+
+            let old_value = reg.value(value.as_str()).unwrap();
+
+            list.insert(0, (String::from("push"), vec![Operand::try_from(old_value).unwrap()]));
+            list.insert(1, (String::from("push"), vec![Operand::String(value.clone())]));
+            list.insert(2, (String::from("push"), vec![Operand::String(key.clone())]));
+            list.insert(3, (String::from("push"), vec![Operand::String(root.clone())]));
+            list.insert(4, (String::from("reg_write_value"), vec![]));
+
         }
-    };*/
+    }
 
     reg.set_value(value, &data).unwrap();
 
     //Ok(Some(inverse))
+}
+
+fn delete_reg_value(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+
+    let root = String::try_from(machine.operand_pop()).unwrap();
+    let key = String::try_from(machine.operand_pop()).unwrap();
+    let value = String::try_from(machine.operand_pop()).unwrap();
+
+    let reg = registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess).unwrap();
+
+    let old_value = reg.value(value.as_str()).unwrap();
+
+    reg.delete_value(value.as_str()).unwrap();
+
+    if let Some(list) = &mut machine.data().inverse {
+
+        list.insert(0, (String::from("push"), vec![Operand::try_from(old_value).unwrap()]));
+        list.insert(1, (String::from("push"), vec![Operand::String(value.clone())]));
+        list.insert(2, (String::from("push"), vec![Operand::String(key.clone())]));
+        list.insert(3, (String::from("push"), vec![Operand::String(root.clone())]));
+        list.insert(4, (String::from("reg_write_value"), vec![]));
+    }
+
+
+}
+
+fn recursive_recover(
+    regkey: &registry::RegKey,
+    rootkey: & Operand,
+    list: & mut Vec<(String, Vec<Operand>)>,
+    index: & mut usize) {
+
+    let name = regkey.to_string();
+    let name = name.split_once("\\").unwrap().1;
+
+    list.insert(*index, (String::from("push"), vec![Operand::String(name.to_string())]));
+    list.insert(*index + 1, (String::from("push"), vec![rootkey.clone()]));
+    list.insert(*index + 2, (String::from("reg_write_key"), vec![]));
+
+    *index = *index + 3;
+
+    for value in regkey.values().map(|x| x.unwrap()) {
+
+        list.insert(*index, (String::from("push"), vec![Operand::try_from(value.data().clone()).unwrap()]));
+        list.insert(*index+1, (String::from("push"), vec![Operand::String(value.name().to_string().unwrap())]));
+        list.insert(*index+2, (String::from("push"), vec![Operand::String(name.to_string())]));
+        list.insert(*index + 3, (String::from("push"), vec![rootkey.clone()]));
+        list.insert(*index + 4, (String::from("reg_write_value"), vec![]));
+
+        *index = *index + 5;
+
+    }
+
+    for key in regkey.keys().map(|x| x.unwrap()) {
+        recursive_recover(&key.open(Security::Read).unwrap(), rootkey, list, index);
+    }
+}
+
+fn delete_reg_key(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+
+
+    let root = String::try_from(machine.operand_pop()).unwrap();
+    let key = String::try_from(machine.operand_pop()).unwrap();
+
+    let reg = registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess).unwrap();
+
+    if let Some(list) = &mut machine.data().inverse {
+        let mut index = 0;
+        recursive_recover(&reg, &Operand::String(root.clone()), list, & mut index);
+    }
+
+
+    reg.delete("", true).unwrap(); //Delete the contents of the key
+    reg.delete_self(false).unwrap(); //Delete the key itself
+
+
+
 }
 
 pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
@@ -512,6 +589,8 @@ pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
     table.insert(Instruction::new(408, "edit", 0, edit));
     table.insert(Instruction::new(409, "reg_write_key", 0, write_reg_key));
     table.insert(Instruction::new(410, "reg_write_value", 0, write_reg_value));
+    table.insert(Instruction::new(411, "reg_delete_key", 0, delete_reg_key));
+    table.insert(Instruction::new(412, "reg_delete_value", 0, delete_reg_value));
 
     table
 

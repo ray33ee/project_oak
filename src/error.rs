@@ -5,7 +5,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///Error type used to encapsulate all errors
 #[derive(Debug)]
 pub enum Error {
-    Custom,
     AlreadyExists,
     IO(std::io::Error),
     FSExtra(fs_extra::error::Error),

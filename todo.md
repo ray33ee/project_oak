@@ -1,7 +1,5 @@
 # Todo
 
-- Add functionality for the delete registry entry
-  - Do this by recursively adding write reg value/key instructions to the inverse
 - Make sure a failed install:
   - unwinds correctly
   - stops the vm

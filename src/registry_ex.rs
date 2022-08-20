@@ -1,7 +1,4 @@
-use std::path::Path;
-use registry::{RegKey, Security};
 use serde::{Serialize, Deserialize};
-use crate::error::Result;
 
 //Creating our own Data and Rootkey implementations is required for serde
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,6 +98,7 @@ impl From<&RootKey> for registry::Hive {
     }
 }
 
+/*
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Tree {
     name: String,
@@ -166,4 +164,4 @@ impl From<&RegKey> for Tree {
             values,
         }
     }
-}
+}*/

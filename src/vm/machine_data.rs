@@ -41,12 +41,12 @@ impl Data {
 
     //If a function fails in the machine, this function should be called to clean up, and to
     //Undo any installation steps taken if this is an installer
-    pub fn reverse(&self) {
+    /*pub fn reverse(&self) {
 
-    }
+    }*/
 
-    pub fn finish(&self) {
+    /*pub fn finish(&self) {
 
-    }
+    }*/
 
 }
