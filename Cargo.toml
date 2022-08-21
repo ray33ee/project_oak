@@ -1,6 +1,6 @@
 [package]
 name = "project_oak"
-version = "0.1.11"
+version = "0.1.12"
 edition = "2021"
 description = "Proof of concept for a action/inverse and step/command based installer and inferred uninstaller"
 

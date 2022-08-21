@@ -1,10 +1,11 @@
 # Todo
 
-- Make sure a failed install:
-  - unwinds correctly
-  - stops the vm
+- Clean up the remaining `Result::unrwap()` calls
+- Add closure call back to `unwrap_or_return!` macro (closure maps error to `Operand`)
+- Create some tests to make sure unsuccessful installers unwind correctly
+- Add registry data enums to `Operand` (and add the corresponding match arms to conversion between `registry::Data` and `Operand`)
 - Add flags to any commands with multiplicity (see NSIS commands)
-- Implement create shortcut
+- Implement create instruction and create shortcut
 - Add a SHIT ton of tests (use a tempdir for this, and create files filled with garbage)
   - Test the following:
     - Variants for each `PathType`

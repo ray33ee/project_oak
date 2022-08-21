@@ -6,6 +6,26 @@ use crate::PathType;
 use crate::registry_ex::RootKey;
 use crate::vm::machine_data::Data;
 
+//This macro will unwrap Results, and handle them accordingly.
+// It will push a message onto the stack (used by the panic instruction)
+// and jump to the error section (at the end of the code).
+//First argument is the object to unwrap, second is the machine and third
+//is a closure that takes the error type, and returns an Operand that is
+//used as an argument to the panic instruction. This closure can also be used to clean up
+//if an instruction has partially been invoked
+macro_rules! unwrap_or_return {
+    ( $e:expr , $m:expr) => {
+        match $e {
+            Ok(x) => x,
+            Err(_) => {
+                $m.jump("_error");
+                $m.operand_push(Operand::String("Project Oak Unwrap error".to_string()));
+                return
+            },
+        }
+    }
+}
+
 /* Stack operations */
 
 //Push a literal onto the stack
@@ -90,15 +110,26 @@ fn ret(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
     machine.ret();
 }
 
+fn panic(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+
+    let message = machine.operand_pop();
+
+    println!("Oak script Panic instruction: {:?}", message);
+}
+
+fn unwind(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+    machine.data().failed = true;
+}
+
 /* Install/uninstall steps */
 
 fn data(machine: & mut Machine<Operand, Data>, args: &[usize]) {
     let name = machine.get_data(args[0]).clone();
-    let destination = PathType::try_from(machine.operand_pop()).unwrap();
+    let destination = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
 
     let destination_path = destination.path(machine.data().temp.as_ref());
 
-    machine.data().install_archive.extract(String::try_from(name).unwrap().as_str(), &destination_path).unwrap();
+    machine.data().install_archive.extract(String::try_from(name).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string")).as_str(), &destination_path).unwrap();
 
     if !destination.is_temp() {
         if let Some(list) = & mut machine.data().inverse {
@@ -110,7 +141,7 @@ fn data(machine: & mut Machine<Operand, Data>, args: &[usize]) {
 
 fn _move(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
-    let source = PathType::try_from(machine.operand_pop()).unwrap();
+    let source = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
     let destination = machine.operand_pop().absolute_path(machine.data().temp.as_ref());
 
     let source_path = source.path(machine.data().temp.as_ref());
@@ -122,15 +153,17 @@ fn _move(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
             let mut options = fs_extra::dir::CopyOptions::default();
             options.content_only = true;
 
-            fs_extra::dir::move_dir(&source_path, &destination, &options).unwrap();
+            unwrap_or_return!(fs_extra::dir::move_dir(&source_path, &destination, &options), machine);
 
         } else if source_path.is_file() {
             let options = fs_extra::file::CopyOptions::default();
 
-            fs_extra::file::move_file(&source_path, &destination, &options).unwrap();
+            unwrap_or_return!(fs_extra::file::move_file(&source_path, &destination, &options), machine);
 
         } else {
-            panic!("File is not a path or file");
+            machine.operand_push(Operand::I64(100));
+            machine.jump("_error");
+            return;
         }
 
 
@@ -169,9 +202,9 @@ fn delete(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
     };
 
     if path.is_dir() {
-        std::fs::remove_dir_all(&path).unwrap();
+        unwrap_or_return!(std::fs::remove_dir_all(&path), machine);
     } else if path.is_file() {
-        std::fs::remove_file(&path).unwrap();
+        unwrap_or_return!(std::fs::remove_file(&path), machine);
     } else {
         panic!("File is not a path or file");
     };
@@ -189,8 +222,8 @@ fn delete(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 }
 
 fn copy(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
-    let source = PathType::try_from(machine.operand_pop()).unwrap();
-    let destination = PathType::try_from(machine.operand_pop()).unwrap();
+    let source = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+    let destination = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
 
     let source_path = source.path(machine.data().temp.as_ref());
     let destination_path = destination.path(machine.data().temp.as_ref());
@@ -200,12 +233,12 @@ fn copy(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
     } else {
         if source_path.is_file() {
 
-            std::fs::copy(&source_path, &destination_path).unwrap();
+            unwrap_or_return!(std::fs::copy(&source_path, &destination_path), machine);
         } else if source_path.is_dir() {
             let mut options = fs_extra::dir::CopyOptions::default();
             options.content_only = true;
 
-            fs_extra::dir::copy(&source_path, &destination_path, &options).unwrap();
+            unwrap_or_return!(fs_extra::dir::copy(&source_path, &destination_path, &options), machine);
         } else {
             panic!("Source is not a file or directory");
         }
@@ -230,49 +263,19 @@ fn copy(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
 
 // Not actually an instruction, it is instead used by the other create methods
-/*fn create(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
-
-}*/
-
-fn rename(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
-
-
-    let from = PathType::try_from(machine.operand_pop()).unwrap();
-    let to = PathType::try_from(machine.operand_pop()).unwrap();
-
-    let temp = machine.data().temp.as_ref();
-
-    let from_path = from.path(temp);
-    let to_path = to.path(temp);
-
-    if from.is_temp() != to.is_temp() {
-        panic!("Arguments for rename must either be both temporary, or both permanent locations")
-    }
-
-    std::fs::rename(from_path.as_path(), to_path.as_path()).unwrap();
-
-    if !from.is_temp() {
-
-
-        if let Some(list) = & mut machine.data().inverse {
-            list.insert(0, (String::from("push"), vec![Operand::Path(from.clone())]));
-            list.insert(1, (String::from("push"), vec![Operand::Path(to.clone())]));
-            list.insert(2, (String::from("rename"), vec![]));
-
-        }
-        //Ok(Some(Step::Rename {from: to.clone(), to: from.clone()}))
-    }
+fn create(_machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
 }
 
+
 fn zip(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
-    let archive = PathType::try_from(machine.operand_pop()).unwrap();
-    let folder = PathType::try_from(machine.operand_pop()).unwrap();
+    let archive = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+    let folder = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
 
     let temp = machine.data().temp.as_ref();
 
-    zip_extensions::write::zip_create_from_directory(&archive.path(temp), &folder.path(temp)).unwrap();
+    unwrap_or_return!(zip_extensions::write::zip_create_from_directory(&archive.path(temp), &folder.path(temp)), machine);
 
     if !archive.is_temp() {
 
@@ -282,29 +285,29 @@ fn zip(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
             list.insert(1, (String::from("delete"), vec![]));
 
         }
-
-        //Ok(Some(Step::Delete { path: archive.path(temp) }))
     }
 }
 
 fn unzip(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
-    let archive = PathType::try_from(machine.operand_pop()).unwrap();
-    let folder = PathType::try_from(machine.operand_pop()).unwrap();
+    let archive = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+    let folder = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+
+
 
     let temp = machine.data().temp.as_ref();
 
 
-    std::fs::create_dir(&folder.path(temp)).unwrap();
+    //std::fs::create_dir(&folder.path(temp)).unwrap();
 
-    zip_extensions::read::zip_extract(&archive.path(temp), &folder.path(temp)).unwrap();
+    unwrap_or_return!(zip_extensions::read::zip_extract(&archive.path(temp), &folder.path(temp)), machine);
 
     if !archive.is_temp() {
         //Ok(Some(Step::Delete { path: folder.path(temp) }))
 
         if let Some(list) = & mut machine.data().inverse {
 
-            list.insert(0, (String::from("push"), vec![Operand::Path(folder)]));
+            list.insert(0, (String::from("push"), vec![Operand::Path(folder.clone())]));
             list.insert(1, (String::from("delete"), vec![]));
 
         }
@@ -317,10 +320,10 @@ fn unzip(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 fn download(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
 
-    let url = String::try_from(machine.operand_pop()).unwrap();
-    let destination = PathType::try_from(machine.operand_pop()).unwrap();
+    let url = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
+    let destination = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
 
-    let response = reqwest::blocking::get(url).unwrap();
+    let response = unwrap_or_return!(reqwest::blocking::get(url), machine);
 
     let temp= machine.data().temp.as_ref();
 
@@ -339,21 +342,23 @@ fn download(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
         panic!("Download destination must be a directory or file")
     };
 
-    let mut dest = std::fs::File::create(file_name.clone()).unwrap();
 
-    let content = response.text().unwrap();
-    std::io::copy(&mut content.as_bytes(), &mut dest).unwrap();
+
+
+    let mut dest = unwrap_or_return!(std::fs::File::create(file_name.clone()), machine);
 
     if !destination.is_temp() {
 
         if let Some(list) = & mut machine.data().inverse {
 
-            list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(file_name))]));
+            list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(file_name.clone()))]));
             list.insert(1, (String::from("delete"), vec![]));
 
         }
-        //Ok(Some(Step::Delete { path: file_name }))
     }
+
+    let content = unwrap_or_return!(response.text(), machine);
+    unwrap_or_return!(std::io::copy(&mut content.as_bytes(), &mut dest), machine);
 
 }
 
@@ -361,53 +366,59 @@ fn edit(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
     use std::io::Write;
 
-    let command = String::try_from(machine.operand_pop()).unwrap();
+    let command = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
 
-    let s = PathType::try_from(machine.operand_pop()).unwrap();
+    let s = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
 
     let source = s.path(machine.data().temp.as_ref());
 
-    let name = match machine.data().uninstall_archive.as_mut() {
-        None => { None }
-        Some(archive) => {Some(archive.archive(&source))}
-    };
-
 
     //Load `source`
-    let content = std::fs::read_to_string(source.as_path()).unwrap();
+    let content = unwrap_or_return!(std::fs::read_to_string(source.as_path()), machine);
 
 
     //Perform find and replace
-    let res = sedregex::find_and_replace(content.as_str(), &[command]).unwrap();
+    let res = unwrap_or_return!(sedregex::find_and_replace(content.as_str(), &[command]), machine);
 
+
+    match machine.data().uninstall_archive.as_mut() {
+        None => {  }
+        Some(archive) => {
+
+            let name = archive.archive(&source);
+
+            if !s.is_temp() {
+
+
+                if let Some(list) = & mut machine.data().inverse {
+                    list.insert(0, (String::from("push"), vec![Operand::Path(s.clone())]));
+                    list.insert(1, (String::from("delete"), vec![]));
+
+
+                    list.insert(2, (String::from("push"), vec![Operand::Path(s.clone())]));
+                    list.insert(3, (String::from("data"), vec![Operand::String(name)]));
+                }
+
+            }
+
+
+        }
+    }
 
     //Save back to `source`
-    let mut fh = std::fs::OpenOptions::new().write(true).open(source.as_path()).unwrap();
+    let mut fh = unwrap_or_return!(std::fs::OpenOptions::new().write(true).open(source.as_path()), machine);
 
-    fh.write_all(res.as_ref().as_bytes()).unwrap();
-
-    if !s.is_temp() {
+    unwrap_or_return!(fh.write_all(res.as_ref().as_bytes()), machine);
 
 
-        if let Some(list) = & mut machine.data().inverse {
-            list.insert(0, (String::from("push"), vec![Operand::Path(s.clone())]));
-            list.insert(1, (String::from("delete"), vec![]));
-
-
-            list.insert(2, (String::from("push"), vec![Operand::Path(s.clone())]));
-            list.insert(3, (String::from("data"), vec![Operand::String(name.unwrap())]));
-        }
-
-        //Ok(Some(Step::RestoreEdit { name: name.unwrap(), destination: source.clone() }))
-    }
 }
 
 
 fn write_reg_key(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
 
-    let root = String::try_from(machine.operand_pop()).unwrap();
-    let key = String::try_from(machine.operand_pop()).unwrap();
+    let root = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
+    let key = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
 
     let reg = registry::Hive::from(&RootKey::from(root.as_str())); //.open(key, Security::AllAccess)?;
 
@@ -432,6 +443,9 @@ fn write_reg_key(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
             .map(|(path, _)| path)
     };
 
+    unwrap_or_return!(reg.create(key.as_str(), Security::AllAccess), machine);
+
+
     if let Some(p) = common {
         if let Some(list) = &mut machine.data().inverse {
             list.insert(0, (String::from("push"), vec![Operand::String(String::from(p.to_str().unwrap()))]));
@@ -439,21 +453,18 @@ fn write_reg_key(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
             list.insert(2, (String::from("reg_delete_key"), vec![]));
         }
     }
-
-    reg.create(key.as_str(), Security::AllAccess).unwrap();
-
 }
 
 
 fn write_reg_value(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
 
-    let root = String::try_from(machine.operand_pop()).unwrap();
-    let key = String::try_from(machine.operand_pop()).unwrap();
-    let value = String::try_from(machine.operand_pop()).unwrap();
-    let data = registry::Data::try_from(machine.operand_pop()).unwrap();
+    let root = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
+    let key = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
+    let value = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
+    let data = registry::Data::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to registry data type"));
 
-    let reg = registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess).unwrap();
+    let reg = unwrap_or_return!(registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess), machine);
 
     //For inverses, there are two cases. If the value already exists (i.e. we are modifying it)
     //and if the value does not already exist (i.e. we are creating it). In the first case,
@@ -480,22 +491,23 @@ fn write_reg_value(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
         }
     }
 
-    reg.set_value(value, &data).unwrap();
+    unwrap_or_return!(reg.set_value(value.as_str(), &data), machine);
+
 
     //Ok(Some(inverse))
 }
 
 fn delete_reg_value(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
-    let root = String::try_from(machine.operand_pop()).unwrap();
-    let key = String::try_from(machine.operand_pop()).unwrap();
-    let value = String::try_from(machine.operand_pop()).unwrap();
+    let root = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
+    let key = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
+    let value = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
 
-    let reg = registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess).unwrap();
+    let reg = unwrap_or_return!(registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess), machine);
 
     let old_value = reg.value(value.as_str()).unwrap();
 
-    reg.delete_value(value.as_str()).unwrap();
+    unwrap_or_return!(reg.delete_value(value.as_str()), machine);
 
     if let Some(list) = &mut machine.data().inverse {
 
@@ -544,22 +556,33 @@ fn recursive_recover(
 fn delete_reg_key(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
 
 
-    let root = String::try_from(machine.operand_pop()).unwrap();
-    let key = String::try_from(machine.operand_pop()).unwrap();
+    let root = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
+    let key = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
 
-    let reg = registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess).unwrap();
+    let reg = unwrap_or_return!(registry::Hive::from(&RootKey::from(root.as_str())).open(key.as_str(), Security::AllAccess), machine);
+
 
     if let Some(list) = &mut machine.data().inverse {
         let mut index = 0;
         recursive_recover(&reg, &Operand::String(root.clone()), list, & mut index);
     }
 
-
-    reg.delete("", true).unwrap(); //Delete the contents of the key
-    reg.delete_self(false).unwrap(); //Delete the key itself
-
+    unwrap_or_return!(reg.delete("", true), machine); //Delete the contents of the key
+    unwrap_or_return!(reg.delete_self(false), machine); //Delete the key itself
 
 
+
+
+
+}
+
+fn test(machine: & mut Machine<Operand, Data>, _args: &[usize]) {
+    let thing: Option<i32> = None;
+
+
+    unwrap_or_return!(thing.ok_or(()), machine);
+
+    println!("Here");
 }
 
 pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
@@ -575,6 +598,8 @@ pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
     table.insert(Instruction::new(201, "jz", 1, jz));
     table.insert(Instruction::new(202, "call", 1, call));
     table.insert(Instruction::new(203, "ret", 0, ret));
+    table.insert(Instruction::new(204, "panic", 0, panic));
+    table.insert(Instruction::new(205, "unwind", 0, unwind));
 
     table.insert(Instruction::new(300, "add", 0, add));
 
@@ -582,7 +607,7 @@ pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
     table.insert(Instruction::new(401, "copy", 0, copy));
     table.insert(Instruction::new(402, "delete", 0, delete));
     table.insert(Instruction::new(403, "move", 0, _move));
-    table.insert(Instruction::new(404, "rename", 0, rename));
+    //table.insert(Instruction::new(404, "rename", 0, rename));
     table.insert(Instruction::new(405, "zip", 0, zip));
     table.insert(Instruction::new(406, "unzip", 0, unzip));
     table.insert(Instruction::new(407, "download", 0, download));
@@ -591,6 +616,12 @@ pub fn get_instruction_table() -> InstructionTable<Operand, Data> {
     table.insert(Instruction::new(410, "reg_write_value", 0, write_reg_value));
     table.insert(Instruction::new(411, "reg_delete_key", 0, delete_reg_key));
     table.insert(Instruction::new(412, "reg_delete_value", 0, delete_reg_value));
+    table.insert(Instruction::new(413, "create", 0, create));
+
+
+
+
+    table.insert(Instruction::new(9999, "test", 0, test));
 
     table
 

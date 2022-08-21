@@ -191,7 +191,7 @@ mod tests {
 
     }
 
-    #[test]
+    /*#[test]
     fn instruction_rename() {
 
         let file_data = "this is some
@@ -228,7 +228,7 @@ mod tests {
             assert_eq!(std::fs::read_to_string(working_path.join("from")).unwrap().as_str(), file_data);
         });
 
-    }
+    }*/
 
     #[test]
     fn instruction_zip() {
@@ -604,6 +604,11 @@ clap=\"1\"";
     }
 
 
+
+    #[test]
+    fn unwind_test() {
+
+    }
 
 
 

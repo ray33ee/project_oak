@@ -25,7 +25,16 @@ pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P) -> 
         format!("{}data \"{}\"", &caps[1], name) //We use &cap[1] to preserve the original whitespace (including an end of line line break and maintain readability
     });
 
-    oak_writer.commands(cow.as_ref());
+    let extra = "
+    jmp \"_end\"
+
+._error:
+    unwind
+    panic
+._end:
+    ";
+
+    oak_writer.commands(format!("{}{}", cow.as_ref(), extra).as_str());
 
 
 
@@ -35,25 +44,34 @@ pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P) -> 
 
 
 pub fn install<P: AsRef<Path>>(installer: P, uninstaller: P) {
+    let failed = {
+        let table = crate::vm::instructions::get_instruction_table();
 
-    let table = crate::vm::instructions::get_instruction_table();
+        //Run the installation step
+        let mut rel = install_step(Data::install(installer.as_ref(), uninstaller.as_ref()));
 
-    //Run the installation step
-    let mut rel = install_step(Data::install(installer, uninstaller));
+        let mut inverse_builder = Builder::new(&table);
 
-    let mut inverse_builder  = Builder::new(&table);
+        for (s, v) in rel.inverse.as_ref().unwrap() {
+            inverse_builder.push(&s, v.clone());
+        }
 
-    for (s, v) in rel.inverse.as_ref().unwrap() {
-        inverse_builder.push(&s, v.clone());
+
+        let inverse_source = format!("{:?}", Code::from(inverse_builder));
+
+        //Save uninstaller code
+        let archive = rel.uninstall_archive.as_mut().unwrap();
+
+        archive.commands(&inverse_source);
+
+        rel.failed
+    };
+
+
+    //If failed, then call uninstall
+    if failed {
+        uninstall(uninstaller);
     }
-
-
-    let inverse_source = format!("{:?}", Code::from(inverse_builder));
-
-    //Save uninstaller code
-    let archive = rel.uninstall_archive.as_mut().unwrap();
-
-    archive.commands(&inverse_source);
 
 }
 

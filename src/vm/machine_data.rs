@@ -7,7 +7,8 @@ pub struct Data {
     pub (crate) temp: Option<TempDir>,
     pub (crate) install_archive: OakRead,
     pub (crate) uninstall_archive: Option<OakWrite>,
-    pub (crate) inverse: Option<Vec<(String, Vec<Operand>)>>
+    pub (crate) inverse: Option<Vec<(String, Vec<Operand>)>>,
+    pub (crate) failed: bool,
 }
 
 impl Data {
@@ -24,6 +25,7 @@ impl Data {
             install_archive,
             uninstall_archive: Some(uninstall_archive),
             inverse: Some(vec![]),
+            failed: false,
         }
 
     }
@@ -36,6 +38,7 @@ impl Data {
             install_archive: uninstall_archive,
             uninstall_archive: None,
             inverse: None,
+            failed: false,
         }
     }
 
