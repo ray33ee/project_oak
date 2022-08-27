@@ -2,9 +2,9 @@ use crate::error::Result;
 use std::fs::OpenOptions;
 use clap::lazy_static::lazy_static;
 use stack_vm::{Builder, Code, Machine, WriteManyTable};
-use crate::vm::machine_data::Data;
 use std::path::{Path};
 use crate::oak::{OakRead, OakWrite};
+use crate::path_type::Inverse;
 
 
 // Really simple language for oak
@@ -20,21 +20,13 @@ pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P) -> 
 
     //Loop over all data commands, add each file (named as an argument to the data command)
     //replace with argument with the name (returned when a file is added to the archive)
-    let cow = RE.replace_all(original_source.as_str(), |caps: &regex::Captures| {
+    /*let cow = RE.replace_all(original_source.as_str(), |caps: &regex::Captures| {
         let name = oak_writer.archive(&caps[2]);
         format!("{}data \"{}\"", &caps[1], name) //We use &cap[1] to preserve the original whitespace (including an end of line line break and maintain readability
-    });
+    });*/
 
-    let extra = "
-    jmp \"_end\"
 
-._error:
-    unwind
-    panic
-._end:
-    ";
-
-    oak_writer.commands(format!("{}{}", cow.as_ref(), extra).as_str());
+    oak_writer.commands(original_source.as_str());
 
 
 
@@ -42,7 +34,7 @@ pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P) -> 
 
 }
 
-
+/*
 pub fn install<P: AsRef<Path>>(installer: P, uninstaller: P) {
     let failed = {
         let table = crate::vm::instructions::get_instruction_table();
@@ -65,21 +57,22 @@ pub fn install<P: AsRef<Path>>(installer: P, uninstaller: P) {
         archive.commands(&inverse_source);
 
         rel.failed
+        false
     };
 
 
     //If failed, then call uninstall
     if failed {
-        uninstall(uninstaller);
+        uninstall(uninstaller).unwrap();
     }
 
 }
 
-pub fn uninstall<P: AsRef<Path>>(uninstaller: P) {
-    install_step(Data::uninstall( uninstaller));
+pub fn uninstall<P: AsRef<Path>>(uninstaller: P) -> std::result::Result<(), ()> {
+    install_step(Data::uninstall( uninstaller))
 }
 
-fn install_step(mut data: Data) -> Data {
+fn install_step(mut data: Data)  -> std::result::Result<(), ()> {
 
     let table = crate::vm::instructions::get_instruction_table();
 
@@ -94,6 +87,64 @@ fn install_step(mut data: Data) -> Data {
     machine.run();
 
     machine.release()
+}
+*/
+
+fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) {
+
+    let failed = {
+        //Open installer
+        let mut read = OakRead::new(installer).unwrap();
+
+        //Get code
+        let code = read.commands().unwrap();
+
+        //Open uninstaller
+        let mut write = uninstaller.as_ref().map(|u| OakWrite::new(u));
+
+        let temp = tempfile::TempDir::new().unwrap();
+
+        let mut inverses = match &uninstaller {
+            None => {None}
+            Some(_) => {Some(Inverse::new())}
+        };
+
+        let res = crate::mlc::run(code.as_str(), & mut read,  write.as_ref(),  inverses.as_ref(), &temp);
+
+        match res {
+            Ok(_) => {
+
+                if let Some(writer) = & mut write {
+                    let st = inverses.unwrap().combine();
+
+                    writer.commands(st.as_str())
+                }
+
+                false
+            }
+            Err(_) => {
+                true
+            }
+        }
+    };
+
+    if failed {
+
+        if let Some(u) = uninstaller {
+            _install(u, None);
+        }
+
+    }
+
+
+}
+
+pub fn install<P: AsRef<Path>>(installer: P, uninstaller: P) {
+    _install(installer, Some(uninstaller));
+}
+
+pub fn uninstall<P: AsRef<Path>>(uninstaller: P) {
+    _install(uninstaller, None);
 }
 
 ///List all the files, folders and commands in an oak repo

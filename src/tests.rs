@@ -42,7 +42,7 @@ mod tests {
         //Closure to perform uninstaller tests
         uninstaller_validator(working_path);
     }
-
+/*
     #[test]
     fn instruction_data() {
 
@@ -603,13 +603,36 @@ clap=\"1\"";
 
     }
 
+*/
 
-
+    /*
     #[test]
     fn unwind_test() {
 
     }
+    */
+
+    #[test]
+    fn print() {
+
+        generic_test(|working_path| {
 
 
+            format!("
+tres = {{}}
+tres.ident = \"a\"
+tres.path = \"E:\\\\Software Projects\\\\IntelliJ\\\\project_oak\\\\tmp\\\\file\\\\wpa_supplicant - Copy.conf\"
+
+__delete(tres)
+            ")
+
+
+        }, |working_path|{
+
+        }, |working_path|{
+
+        });
+
+    }
 
 }

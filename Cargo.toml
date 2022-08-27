@@ -1,6 +1,6 @@
 [package]
 name = "project_oak"
-version = "0.1.12"
+version = "0.1.13"
 edition = "2021"
 description = "Proof of concept for a action/inverse and step/command based installer and inferred uninstaller"
 
@@ -21,3 +21,4 @@ sedregex = "0.2.5"
 stack-vm = { version = "1.0.3", git = "https://github.com/ray33ee/stack-vm" }
 regex = "1.6.0"
 lazy_static = "1.4.0"
+hlua = "0.4.1"

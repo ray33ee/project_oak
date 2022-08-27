@@ -13,13 +13,15 @@ use std::path::{Path};
 use oak::{OakRead, OakWrite};
 
 mod error;
-mod vm;
 mod oak;
 mod registry_ex;
 mod hlc;
 mod tests;
+mod mlc;
+mod functions;
+mod path_type;
 
-use crate::vm::operand::{PathType};
+use crate::path_type::{PathType};
 
 fn main() {
 
