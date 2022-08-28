@@ -1,4 +1,7 @@
+use std::borrow::{Borrow, BorrowMut};
+use fs_extra::dir::DirEntryAttr::Path;
 use serde::{Serialize, Deserialize};
+
 
 //Creating our own Data and Rootkey implementations is required for serde
 #[derive(Debug, Serialize, Deserialize)]
@@ -97,71 +100,3 @@ impl From<&RootKey> for registry::Hive {
         }
     }
 }
-
-/*
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Tree {
-    name: String,
-    keys: Vec<Tree>,
-    values: Vec<(String, Data)>
-}
-
-impl Tree {
-    //Take the registry tree and restore it to the given root and key
-    pub fn restore(&self, root: &RootKey, key: &str) -> Result<()> {
-
-
-        let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
-
-        let path = Path::new(key).join(&self.name);
-        let sub = path.to_str().unwrap();
-
-        reg.create(&self.name, Security::AllAccess)?;
-
-
-        for key in self.keys.iter() {
-            key.restore(root, sub)?;
-        }
-
-        let reg = registry::Hive::from(root).open(sub, Security::AllAccess)?;
-
-        for (name, data) in self.values.iter() {
-            reg.set_value(name, &registry::Data::from(data))?;
-        }
-
-        Ok(())
-    }
-}
-
-impl From<&RegKey> for Tree {
-    //Recursively save registry key, subkeys and values as Tree
-    fn from(k: &RegKey) -> Self {
-        let path = k.to_string();
-
-        let name = Path::new(&path).components().last().unwrap().as_os_str().to_str().unwrap();
-        let name = String::from(name);
-
-        let values = k
-            .values()
-            .map(|value| {
-                let unwrap = value.unwrap();
-                (unwrap.name().to_string_lossy(), Data::from(unwrap.data().clone()))
-            })
-            .collect();
-
-        let keys = k
-            .keys()
-            .map(|keyref| {
-                let unwrapped = keyref.unwrap();
-                let reg = unwrapped.open(Security::AllAccess).unwrap();
-                Tree::from(&reg)
-
-            }).collect();
-
-        Self {
-            name,
-            keys,
-            values,
-        }
-    }
-}*/

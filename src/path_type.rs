@@ -3,8 +3,6 @@ use std::sync::Mutex;
 use hlua::{AsMutLua, PushGuard};
 use tempfile::TempDir;
 
-use hlua::implement_lua_read;
-
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PathType {
     Absolute(PathBuf),
@@ -34,32 +32,6 @@ impl PathType {
     }
 }
 
-impl<'l, L: AsMutLua<'l>> hlua::LuaRead<L> for PathType {
-    fn lua_read_at_position(lua: L, index: i32) -> Result<Self, L> {
-        let mut table = hlua::LuaTable::lua_read_at_position(lua, index)?;
-
-        let identifier: String = table.get("ident").unwrap();
-
-        let path: String = table.get("path").unwrap();
-
-        match identifier.as_str() {
-            "t" => Ok(PathType::Temporary(PathBuf::from(path))),
-            "a" => Ok(PathType::Absolute(PathBuf::from(path))),
-            _ => todo!(),
-        }
-    }
-}
-
-/*impl hlua::Push<L> for PathType {
-    type Err = ();
-
-    fn push_to_lua(self, lua: L) -> Result<PushGuard<L>, (Self::Err, L)> {
-
-
-
-        todo!()
-    }
-}*/
 
 pub struct Inverse(Mutex<Vec<String>>);
 

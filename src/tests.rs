@@ -619,11 +619,15 @@ clap=\"1\"";
 
 
             format!("
-tres = {{}}
-tres.ident = \"a\"
-tres.path = \"E:\\\\Software Projects\\\\IntelliJ\\\\project_oak\\\\tmp\\\\file\\\\wpa_supplicant - Copy.conf\"
+--tres = {{}}
+--tres.ident = \"a\"
+--tres.path = \"E:\\\\Software Projects\\\\IntelliJ\\\\project_oak\\\\tmp\\\\file\\\\wpa_supplicant - Copy.conf\"
 
-__delete(tres)
+--__delete(tres)
+
+multi = {{\"pokpokp\", \"sdpf\"}}
+
+__reg_test(multi)
             ")
 
 

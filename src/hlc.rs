@@ -34,62 +34,6 @@ pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P) -> 
 
 }
 
-/*
-pub fn install<P: AsRef<Path>>(installer: P, uninstaller: P) {
-    let failed = {
-        let table = crate::vm::instructions::get_instruction_table();
-
-        //Run the installation step
-        let mut rel = install_step(Data::install(installer.as_ref(), uninstaller.as_ref()));
-
-        let mut inverse_builder = Builder::new(&table);
-
-        for (s, v) in rel.inverse.as_ref().unwrap() {
-            inverse_builder.push(&s, v.clone());
-        }
-
-
-        let inverse_source = format!("{:?}", Code::from(inverse_builder));
-
-        //Save uninstaller code
-        let archive = rel.uninstall_archive.as_mut().unwrap();
-
-        archive.commands(&inverse_source);
-
-        rel.failed
-        false
-    };
-
-
-    //If failed, then call uninstall
-    if failed {
-        uninstall(uninstaller).unwrap();
-    }
-
-}
-
-pub fn uninstall<P: AsRef<Path>>(uninstaller: P) -> std::result::Result<(), ()> {
-    install_step(Data::uninstall( uninstaller))
-}
-
-fn install_step(mut data: Data)  -> std::result::Result<(), ()> {
-
-    let table = crate::vm::instructions::get_instruction_table();
-
-    // Get installer source
-    let install_source = &data.install_archive.commands().unwrap();
-
-    let code = Code::parse(&install_source, &table);
-
-    //Setup and run VM
-    let constants: WriteManyTable<crate::vm::operand::Operand> = WriteManyTable::new();
-    let mut machine = Machine::new(code, &constants, &table, data);
-    machine.run();
-
-    machine.release()
-}
-*/
-
 fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) {
 
     let failed = {
