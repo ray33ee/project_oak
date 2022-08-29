@@ -2,7 +2,6 @@
 mod tests {
     use std::io::Write;
     use std::path::Path;
-    use registry::{Hive, Security};
     use tempfile::TempDir;
     use crate::hlc;
 
@@ -28,7 +27,6 @@ mod tests {
         let installer_path = working_path.join("installer");
 
         hlc::create_installer(source_path.as_path(), installer_path.as_path()).unwrap();
-
 
         let uninstaller_path = working_path.join("uninstaller");
 
@@ -625,9 +623,18 @@ clap=\"1\"";
 
 --__delete(tres)
 
-multi = {{\"pokpokp\", \"sdpf\"}}
+--multi = {{\"pokpokp\", \"sdpf\"}}
 
-__reg_test(multi)
+--__reg_test(multi)
+
+--__test(pathtype.absolute(\"E:\\\\Software Projects\\\\IntelliJ\\\\project_oak\\\\tmp\\\\file\\\\wpa_supplicant - Copy.conf\"))
+
+arr = {{}}
+arr[0] = \"pko\"
+arr[1] = \"jg\"
+
+__reg(registry.expanded(\"dfgfg\"))
+
             ")
 
 

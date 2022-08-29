@@ -6,7 +6,7 @@ use zip::write::FileOptions;
 use crate::error::{Result};
 use zip_extensions::{ZipWriterExtensions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::ops::{Deref, DerefMut};
+use std::ops::{DerefMut};
 use std::sync::Mutex;
 
 ///A struct used to read an oak archive

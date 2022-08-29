@@ -2,8 +2,6 @@ extern crate lazy_static;
 
 extern crate zip;
 extern crate fs_extra;
-extern crate serde;
-extern crate serde_json;
 extern crate zip_extensions;
 extern crate clap;
 extern crate tempfile;
@@ -20,8 +18,6 @@ mod tests;
 mod mlc;
 mod functions;
 mod path_type;
-
-use crate::path_type::{PathType};
 
 fn main() {
 

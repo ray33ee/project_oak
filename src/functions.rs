@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use registry::Security;
 use tempfile::TempDir;
 use crate::{OakRead, OakWrite};
@@ -81,6 +81,7 @@ pub fn delete(mut uninstaller: Option<& OakWrite>, inverses: Option<&Inverse>, p
         Some(archive) => {Some(archive.archive(&path))}
     };
 
+    println!("path: {}", path.to_str().unwrap());
 
     if path.is_dir() {
         std::fs::remove_dir_all(&path).unwrap();

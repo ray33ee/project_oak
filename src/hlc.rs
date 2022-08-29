@@ -1,7 +1,6 @@
 use crate::error::Result;
 use std::fs::OpenOptions;
 use clap::lazy_static::lazy_static;
-use stack_vm::{Builder, Code, Machine, WriteManyTable};
 use std::path::{Path};
 use crate::oak::{OakRead, OakWrite};
 use crate::path_type::Inverse;
@@ -61,6 +60,8 @@ fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) {
                 if let Some(writer) = & mut write {
                     let st = inverses.unwrap().combine();
 
+                    println!("st: {}", st);
+
                     writer.commands(st.as_str())
                 }
 
@@ -88,6 +89,7 @@ pub fn install<P: AsRef<Path>>(installer: P, uninstaller: P) {
 }
 
 pub fn uninstall<P: AsRef<Path>>(uninstaller: P) {
+
     _install(uninstaller, None);
 }
 

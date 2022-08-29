@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
-use hlua::{AsMutLua, PushGuard};
 use tempfile::TempDir;
 
 #[derive(PartialEq, Eq, Clone, Debug)]

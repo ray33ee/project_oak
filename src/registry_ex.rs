@@ -1,10 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
-use fs_extra::dir::DirEntryAttr::Path;
-use serde::{Serialize, Deserialize};
 
 
 //Creating our own Data and Rootkey implementations is required for serde
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum Data {
     None,
     String(String),
@@ -67,7 +64,7 @@ impl From<&Data> for registry::Data {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub enum RootKey {
     HKLM,
     HKCC,

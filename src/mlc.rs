@@ -1,48 +1,21 @@
 use std::path::{Path, PathBuf};
 use std::result::Result;
-use crate::{OakRead, OakWrite, PathType};
+use crate::{OakRead, OakWrite};
 
-use std::cell::UnsafeCell;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use crate::path_type::{Inverse, PathType};
 
-use hlua::{AnyLuaValue, AsMutLua, Lua, LuaRead};
-use crate::path_type::Inverse;
+use rlua::{Context, FromLua, Lua, Table, Value};
 use crate::registry_ex::Data;
 
+pub fn thing(path: PathType) {
+    println!("path: {:?}", path);
+
+}
 
 //Take the oak code and run it
 pub fn run(code: & str, install: & OakRead, mut uninstall: Option<& OakWrite>, inverses: Option<& Inverse>, temp: &tempfile::TempDir) -> Result<(), ()> {
 
-    let mut lua = Lua::new();
-
-    lua.openlibs();
-
-    //Delete the file and io functions
-    lua.set("io", hlua::AnyLuaValue::LuaNil);
-
-    //Add the other oak functions
-    {
-        //Add our owm oan functions
-        // - oak.zip
-        // - oak.unzip
-        // - oak.delete_registry_entry
-        // - oak.write_registry_value (one for each value type)
-        // - oak.write_registry_key
-        // - oak.download
-        // - oak.edit
-
-        let oak_functions = lua.empty_array("oak");
-    }
-
-    //Add the __* functions
-    lua.set("__test", hlua::function1(move |path: PathType| -> () { println!("{:?}", path); }));
-    lua.set("__reg_test", hlua::function1(move |data: Data| -> () { println!("{:?}", data); }));
-
-    lua.set("__delete", hlua::function1(move |path: PathType| -> () { crate::functions::delete(uninstall, inverses, &path, temp); }));
-
-    lua.set("__deletse", hlua::function1(move |path: PathType| -> () { crate::functions::delete(uninstall, inverses, &path, temp); }));
-
+    let lua = Lua::new();
 
 
     let code = format!("
@@ -113,117 +86,206 @@ _dword = null
 
     {}", code);
 
-    lua.execute::<()>(code.as_str()).unwrap();
+    lua.context(|ctx| {
+        ctx.scope(|scope| {
+
+            ctx.globals().set("__delete",
+                              scope.create_function(|_, path: PathType| {
+                                  crate::functions::delete(uninstall, inverses, &path, temp);
+                                  Ok(())
+                              }).unwrap()
+            ).unwrap();
+
+            ctx.globals().set("__reg",
+                              scope.create_function(|_, data: Data| {
+                                  println!("{:?}", data);
+                                  Ok(())
+                              }).unwrap()
+            ).unwrap();
+
+
+
+            ctx.load(code.as_str()).exec().unwrap();
+
+        });
+    });
+
+    //Delete the file and io functions
+
+    //Add the other oak functions
+    {
+        //Add our owm oan functions
+        // - oak.zip
+        // - oak.unzip
+        // - oak.delete_registry_entry
+        // - oak.write_registry_value (one for each value type)
+        // - oak.write_registry_key
+        // - oak.download
+        // - oak.edit
+
+    }
+
+    /*lua.context(|ctx| {
+        let f= ctx.create_function(|_, path: PathType| {
+            crate::functions::delete(uninstall, inverses, &path, temp);
+            Ok(())
+        }).unwrap();
+
+        ctx.globals().set("__test", f).unwrap();
+    });*/
 
     Ok(())
 }
 
+impl<'l> FromLua<'l> for PathType {
+    fn from_lua(lua_value: Value<'l>, lua: Context<'l>) -> rlua::Result<Self> {
+        let table = Table::from_lua(lua_value, lua)?;
 
-impl<'l, L: AsMutLua<'l>> hlua::LuaRead<L> for PathType {
-    fn lua_read_at_position(lua: L, index: i32) -> Result<Self, L> {
-        let mut table = hlua::LuaTable::lua_read_at_position(lua, index)?;
+        let ident: String = table.get("ident")?;
 
-        let identifier: String = table.get("ident").unwrap();
+        let path: String = table.get("path")?;
 
-        let path: String = table.get("path").unwrap();
-
-        match identifier.as_str() {
-            "t" => Ok(PathType::Temporary(PathBuf::from(path))),
-            "a" => Ok(PathType::Absolute(PathBuf::from(path))),
-            _ => todo!(),
+        match ident.as_str() {
+            "t" => { Ok(PathType::Temporary(PathBuf::from(path))) },
+            "a" => { Ok(PathType::Absolute(PathBuf::from(path))) },
+            _ => {
+                Err(rlua::Error::FromLuaConversionError {
+                    from: "Lua Table",
+                    to: "PathType",
+                    message: Some(format!("Invalid PathType value. Please create a pathtype via the pathtype.temp or pathtype.absolute functions"))
+                })
+            }
         }
+
+
     }
 }
 
+impl<'lua> FromLua<'lua> for Data {
+    fn from_lua(lua_value: Value<'lua>, lua: Context<'lua>) -> rlua::Result<Self> {
+        match lua_value {
+            Value::Nil => {Ok(Data::None)}
+            Value::Boolean(_) => {
+                Err(rlua::Error::FromLuaConversionError {
+                    from: "Boolean",
+                    to: "Data",
+                    message: Some("Could not convert lua boolean to registry Data".to_string()),
+                })
+            }
+            Value::LightUserData(_) => {
+                Err(rlua::Error::FromLuaConversionError {
+                    from: "LightUserData",
+                    to: "Data",
+                    message: Some("Could not convert lua LightUserData to registry Data".to_string()),
+                })
+            }
+            Value::Integer(i) => {Ok(Data::U32(i as u32))}
+            Value::Number(n) => {Ok(Data::U32(n as u32))}
+            Value::String(s) => {Ok(Data::String(s.to_str().unwrap().to_string()))}
+            Value::Table(table) => {
+                match table.get::<& str, String>("ident") {
+                    Ok(ident) => {
 
-impl<'l, L: AsMutLua<'l>> LuaRead<L> for Data {
-    fn lua_read_at_position(lua: L, index: i32) -> Result<Self, L> {
-        let val = AnyLuaValue::lua_read_at_position(lua, index)?;
-
-        match val {
-            AnyLuaValue::LuaString(s) => { Ok(Data::String(s)) }
-            AnyLuaValue::LuaAnyString(_) => {panic!("Cannot convert lua AnyString to registry data")}
-            AnyLuaValue::LuaNumber(n) => { Ok(Data::U32(n as u32)) }
-            AnyLuaValue::LuaBoolean(_) => {panic!("Cannot convert lua boolean to registry data")}
-            AnyLuaValue::LuaArray(v) => {
-
-                let ident = v.iter().find_map(|(key, value)| {
-                    if let AnyLuaValue::LuaString(s) = key {
-                        if s == "ident" {
-                            if let AnyLuaValue::LuaString(v) = value {
-                                return Some(v)
-                            }
-                        }
-                    }
-
-                    None
-                });
-
-                let value = v.iter().find_map(|(key, value)| {
-                    if let AnyLuaValue::LuaString(s) = key {
-                        if s == "value" {
-                            return Some(value)
-                        }
-                    }
-
-                    None
-                });
-
-                match ident {
-                    Some(i) => {
-                        match i.as_str() {
-                            "expanded" => {
-                                if let AnyLuaValue::LuaString(s) = value.unwrap() {
-                                    Ok(Data::ExpandString(s.clone()))
-                                } else {
-                                    panic!("If ident is 'expanded', value must be a string")
-                                }
-                            }
+                        match ident.as_str() {
                             "dword" => {
-                                if let AnyLuaValue::LuaNumber(n) = value.unwrap() {
-                                    Ok(Data::U64(*n as u64))
-                                } else {
-                                    panic!("If ident is 'dword', value must be a number")
-                                }
+                                let val = table.get::<& str, u64>("value")?;
+                                Ok(Data::U64(val))
+                            },
+                            "expanded" => {
+                                let val = table.get::<& str, String>("value")?;
+                                Ok(Data::ExpandString(val))
+                            },
+                            _ => {
+                                Err(rlua::Error::FromLuaConversionError {
+                                    from: "Table",
+                                    to: "Data",
+                                    message: Some("Invalid ident in table. Please use the registry functions, string, list of strings, or number for registry data".to_string()),
+                                })
                             }
-                            _ => {panic!("Invalid ident")}
                         }
+
                     }
-                    None => {
-                        let is_string_array = v.iter().all(|(key, value)| {
-                            if let AnyLuaValue::LuaNumber(_) = key {
-                                if let AnyLuaValue::LuaString(_) = value {
-                                    return true;
+                    Err(_) => {
+
+                        let pairs: Vec<_> = table.pairs::<Value, Value>().into_iter().map(|x| x.unwrap()).collect();
+
+                        let is_multiline = move || {
+                            let mut multi = vec![None; pairs.len()];
+
+                            for (k, v) in pairs {
+
+                                if let Value::String(s) = v {
+                                    let ind = if let Value::Number(n) = k {
+                                        n as usize
+                                    } else if let Value::Integer(n) = k {
+                                        n as usize
+                                    } else {
+                                        return Ok(None)
+                                    };
+
+                                    *(multi.get_mut(ind).ok_or(rlua::Error::FromLuaConversionError {
+                                        from: "Vector of Strings",
+                                        to: "Data::MultiString",
+                                        message: Some("Bad index in multi string lua table".to_string()),
+                                    })?) = Some(s.to_str().map_err(|x| x)?.to_string());
+
+                                } else {
+                                    return Ok(None);
                                 }
-                            }
-                            false
-                        });
 
-                        if is_string_array {
-
-                            let mut multiline: Vec<_> = v.iter().map(|_| None).collect();
-
-                            for (key, value) in v {
-                                if let AnyLuaValue::LuaNumber(n) = key {
-                                    if let AnyLuaValue::LuaString(s) = value {
-                                        multiline[n as usize] = Some(s.clone())
-                                    }
-                                }
                             }
 
-                            Ok(Data::MultiString(multiline.iter().map(|x| x.as_ref().unwrap().clone()).collect()))
+                            Ok(Some(multi))
+                        };
 
-                        } else {
-                            panic!("Could not convert value to registry data")
+                        match is_multiline()? {
+                            Some(v) => {
+                                Ok(Data::MultiString(v.into_iter().map(|x| x.unwrap()).collect()))
+                            }
+                            None => {
+
+                                Err(rlua::Error::FromLuaConversionError {
+                                    from: "Table",
+                                    to: "Data",
+                                    message: Some("Could not convert lua table to registry Data".to_string()),
+                                })
+                            }
                         }
+
+
+
                     }
                 }
 
-
             }
-            AnyLuaValue::LuaNil => {Ok(Data::None)}
-            AnyLuaValue::LuaOther => {panic!("Cannot convert lua other to registry data")}
+            Value::Function(_) => {
+                Err(rlua::Error::FromLuaConversionError {
+                    from: "Function",
+                    to: "Data",
+                    message: Some("Could not convert lua function to registry Data".to_string()),
+                })
+            }
+            Value::Thread(_) => {
+                Err(rlua::Error::FromLuaConversionError {
+                    from: "Thread",
+                    to: "Data",
+                    message: Some("Could not convert lua thread to registry Data".to_string()),
+                })
+            }
+            Value::UserData(_) => {
+                Err(rlua::Error::FromLuaConversionError {
+                    from: "UserData",
+                    to: "Data",
+                    message: Some("Could not convert lua userdata to registry Data".to_string()),
+                })
+            }
+            Value::Error(_) => {
+                Err(rlua::Error::FromLuaConversionError {
+                    from: "Error",
+                    to: "Data",
+                    message: Some("Could not convert lua error to registry Data".to_string()),
+                })
+            }
         }
     }
 }
-
