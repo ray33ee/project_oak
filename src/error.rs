@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+use sedregex::ErrorKind;
 
 ///Result type encapsulating the [`error::Error type`]
 pub type Result<T> = std::result::Result<T, Error>;
@@ -6,11 +8,23 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     AlreadyExists,
+    DoesntExist,
     IO(std::io::Error),
     FSExtra(fs_extra::error::Error),
     Zip(zip::result::ZipError),
     Reqwest(reqwest::Error),
-    Registry(registry::Error)
+    Registry(registry::Error),
+    SedRegex(sedregex::ErrorKind),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for Error {
+
 }
 
 impl From<std::io::Error> for Error {
@@ -41,4 +55,10 @@ impl From<registry::key::Error> for Error {
 
 impl From<registry::value::Error> for Error {
     fn from(e: registry::value::Error) -> Self { Error::Registry(registry::Error::from(e)) }
+}
+
+impl From<sedregex::ErrorKind> for Error {
+    fn from(e: ErrorKind) -> Self {
+        Error::SedRegex(e)
+    }
 }

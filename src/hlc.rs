@@ -52,25 +52,22 @@ fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) {
             Some(_) => {Some(Inverse::new())}
         };
 
+
         let res = crate::mlc::run(code.as_str(), & mut read,  write.as_ref(),  inverses.as_ref(), &temp);
 
-        match res {
-            Ok(_) => {
+        if let Some(writer) = & mut write {
+            let st = inverses.unwrap().combine();
 
-                if let Some(writer) = & mut write {
-                    let st = inverses.unwrap().combine();
+            writer.commands(st.as_str())
+        }
 
-                    println!("st: {}", st);
-
-                    writer.commands(st.as_str())
-                }
-
-                false
-            }
-            Err(_) => {
-                true
+        if res.is_err() {
+            match res.as_ref().err().unwrap() {
+                _ => {}
             }
         }
+
+        res.is_err()
     };
 
     if failed {

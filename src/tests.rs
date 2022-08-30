@@ -1,7 +1,7 @@
 
 mod tests {
     use std::io::Write;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use tempfile::TempDir;
     use crate::hlc;
 
@@ -74,6 +74,7 @@ mod tests {
         });
 
     }
+*/
 
     #[test]
     fn instruction_delete() {
@@ -92,10 +93,8 @@ mod tests {
             data_file.write_all(file_data.as_bytes()).unwrap();
 
             format!("
-.main
-    push p\"{}\"
-    delete
-", sample_path.to_string_lossy().as_ref())
+    __delete(pathtype.absolute({:?}))
+", sample_path)
 
         }, |working_path|{
 
@@ -108,6 +107,8 @@ mod tests {
         });
 
     }
+
+
 
     #[test]
     fn instruction_move() {
@@ -127,11 +128,21 @@ mod tests {
 
             data_file.write_all(file_data.as_bytes()).unwrap();
 
+            println!("{}", format!("
+
+
+    __move(pathtype.absolute({:?}), pathtype.absolute({:?}))
+
+
+", from_path, to_path));
+
             format!("
-.main
-    push p\"{}\"
-    push p\"{}\"
-    move", to_path.to_string_lossy().as_ref(), from_path.to_string_lossy().as_ref())
+
+
+    __move(pathtype.absolute({:?}), pathtype.absolute({:?}))
+
+
+", from_path, to_path)
         }, |working_path|{
 
             assert!(!working_path.join("from").exists());
@@ -169,10 +180,8 @@ mod tests {
             data_file.write_all(file_data.as_bytes()).unwrap();
 
             format!("
-.main
-    push p\"{}\"
-    push p\"{}\"
-    copy", to_path.to_string_lossy().as_ref(), from_path.to_string_lossy().as_ref())
+    __copy(pathtype.absolute({:?}), pathtype.absolute({:?}))
+", from_path, to_path)
         }, |working_path|{
 
             assert!(working_path.join("from").exists());
@@ -188,6 +197,8 @@ mod tests {
         });
 
     }
+
+
 
     /*#[test]
     fn instruction_rename() {
@@ -251,10 +262,10 @@ mod tests {
             data_file.write_all(file_data.as_bytes()).unwrap();
 
             format!("
-.main
-    push p\"{}\"
-    push p\"{}\"
-    zip", directory.to_string_lossy().as_ref(), archive.to_string_lossy().as_ref())
+
+    __zip(pathtype.absolute({:?}), pathtype.absolute({:?}))
+
+", archive, directory)
         }, |working_path|{
 
             assert!(working_path.join("arch").exists());
@@ -296,10 +307,10 @@ mod tests {
             std::fs::remove_dir_all(directory.as_path()).unwrap();
 
             format!("
-.main
-    push p\"{}\"
-    push p\"{}\"
-    unzip", directory.to_string_lossy().as_ref(), archive.to_string_lossy().as_ref())
+
+    __unzip(pathtype.absolute({:?}), pathtype.absolute({:?}))
+
+", archive, directory)
         }, |working_path|{
 
             assert!(working_path.join("dir").exists());
@@ -340,10 +351,11 @@ clap=\"1\"";
             std::fs::File::create(file.as_path()).unwrap();
 
             format!("
-.main
-    push p\"{}\"
-    push \"https://raw.githubusercontent.com/ray33ee/chembal/68b9402ff8c00e7fc041a9f95164ba0003c87d7a/Cargo.toml\"
-    download", file.to_string_lossy().as_ref())
+
+
+    __download(\"https://raw.githubusercontent.com/ray33ee/chembal/68b9402ff8c00e7fc041a9f95164ba0003c87d7a/Cargo.toml\", pathtype.absolute({:?}))
+
+", file)
         }, |working_path|{
 
             assert!(working_path.join("download").exists());
@@ -370,11 +382,12 @@ clap=\"1\"";
 
             file.write_all(file_data.as_bytes()).unwrap();
 
+
             format!("
-.main
-    push p\"{}\"
-    push \"s/in/IN/g\"
-    edit", file_path.to_string_lossy().as_ref())
+
+    __edit(pathtype.absolute({:?}), \"s/in/IN/g\")
+
+", file_path)
         }, |working_path|{
 
             assert!(working_path.join("file").exists());
@@ -388,7 +401,7 @@ clap=\"1\"";
         });
 
     }
-
+/*
     #[test]
     fn instruction_reg_write_key() {
 
@@ -617,31 +630,23 @@ clap=\"1\"";
 
 
             format!("
---tres = {{}}
---tres.ident = \"a\"
---tres.path = \"E:\\\\Software Projects\\\\IntelliJ\\\\project_oak\\\\tmp\\\\file\\\\wpa_supplicant - Copy.conf\"
 
---__delete(tres)
+path = \"E:\\\\Software Projects\\\\IntelliJ\\\\project_oak\\\\tmp\\\\file\\\\wpa_supplicant - Copy.conf\"
 
---multi = {{\"pokpokp\", \"sdpf\"}}
+__delete(pathtype.absolute(path))
 
---__reg_test(multi)
 
---__test(pathtype.absolute(\"E:\\\\Software Projects\\\\IntelliJ\\\\project_oak\\\\tmp\\\\file\\\\wpa_supplicant - Copy.conf\"))
-
-arr = {{}}
-arr[0] = \"pko\"
-arr[1] = \"jg\"
-
-__reg(registry.expanded(\"dfgfg\"))
 
             ")
 
 
         }, |working_path|{
 
+            assert!(!PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\file\\wpa_supplicant - Copy.conf").exists())
+
         }, |working_path|{
 
+            assert!(PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\file\\wpa_supplicant - Copy.conf").exists())
         });
 
     }

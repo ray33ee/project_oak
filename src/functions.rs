@@ -4,123 +4,143 @@ use tempfile::TempDir;
 use crate::{OakRead, OakWrite};
 use crate::registry_ex::RootKey;
 use crate::path_type::{Inverse, PathType};
+use crate::error::{Error, Result};
 
+//Like most languages, lua needs its backslashes escaped
+pub fn escape_slashes<P: AsRef<Path>>(path: P) -> String {
+    path.as_ref().to_str().unwrap().replace("\\", "\\\\")
+}
 
-pub fn data(installer: & mut OakRead, inverses: Option<& mut Vec<String>>, name: & str, destination: PathType, temp: & TempDir) {
-    //let destination = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+pub fn data(installer: & OakRead, inverses: Option<& Inverse>, name: & str, destination: &PathType, temp: & TempDir) -> Result<()>  {
 
     let destination_path = destination.to_absolute_path(temp);
 
-    installer.extract(name, &destination_path).unwrap();
+    installer.extract(name, &destination_path)?;
 
     if !destination.is_temp() {
         if let Some(list) = inverses {
             //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(destination_path.as_path().to_path_buf()))]));
             //list.insert(1, (String::from("delete"), vec![]));
+
+
+            list.insert(0, format!("__delete(pathtype.absolute({:?}))", destination_path));
+
         }
     }
+
+    Ok(())
 }
 
-pub fn _move(inverses: Option<& mut Vec<String>>, source: PathType, destination: & PathType, temp: & TempDir) {
+pub fn _move(inverses: Option<& Inverse>, source: & PathType, destination: & PathType, temp: & TempDir) -> Result<()> {
 
-    //let source = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+    let d = destination;
+
     let destination = destination.to_absolute_path(temp);
 
     let source_path = source.to_absolute_path(temp);
 
     if destination.exists() {
-        panic!("Already exists") //, crate::Error::AlreadyExists)
+        return Err(Error::AlreadyExists)
     } else {
         if source_path.is_dir() {
             let mut options = fs_extra::dir::CopyOptions::default();
             options.content_only = true;
 
-            fs_extra::dir::move_dir(&source_path, &destination, &options).unwrap();
+            fs_extra::dir::move_dir(&source_path, &destination, &options)?;
 
         } else if source_path.is_file() {
             let options = fs_extra::file::CopyOptions::default();
 
-            fs_extra::file::move_file(&source_path, &destination, &options).unwrap();
+            fs_extra::file::move_file(&source_path, &destination, &options)?;
 
         } else {
-            panic!("Not a file or directory");
+            return Err(Error::DoesntExist);
         }
 
-
-        if let Some(list) = inverses {
-            match &source {
-                PathType::Absolute(s) => {
-
-
-                    //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(s.clone()))]));
-                    //list.insert(1, (String::from("push"), vec![Operand::Path(PathType::Absolute(destination))]));
-                    //list.insert(2, (String::from("move"), vec![]));
-
-                    //Ok(Some(Step::Move { source: SpecialPath::Path(destination.clone()), destination: s.clone() }))
-                }
-                PathType::Temporary(_) => {
+        if !d.is_temp() {
+            if let Some(list) = inverses {
+                match &source {
+                    PathType::Absolute(s) => {
 
 
-                    //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(destination))]));
-                    //list.insert(1, (String::from("delete"), vec![]));
+                        //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(s.clone()))]));
+                        //list.insert(1, (String::from("push"), vec![Operand::Path(PathType::Absolute(destination))]));
+                        //list.insert(2, (String::from("move"), vec![]));
 
-                    //Ok(Some(Step::Delete { path: destination.clone() }))
+                        //Ok(Some(Step::Move { source: SpecialPath::Path(destination.clone()), destination: s.clone() }))
+
+                        list.insert(0, format!("__move(pathtype.absolute({:?}), pathtype.absolute({:?}))", destination, s));
+                    }
+                    PathType::Temporary(_) => {
+
+
+                        //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(destination))]));
+                        //list.insert(1, (String::from("delete"), vec![]));
+
+                        //Ok(Some(Step::Delete { path: destination.clone() }))
+
+                        list.insert(0, format!("__delete(pathtype.absolute({:?}))", destination));
+                    }
                 }
             }
-
         }
     }
+    Ok(())
 }
 
-pub fn delete(mut uninstaller: Option<& OakWrite>, inverses: Option<&Inverse>, path: & PathType, temp: & TempDir) {
+pub fn delete(mut uninstaller: Option<& OakWrite>, inverses: Option<&Inverse>, path: & PathType, temp: & TempDir) -> Result<()> {
 
     let path = path.to_absolute_path(temp);
 
-    let name = match uninstaller.as_mut() {
-        None => { None }
-        Some(archive) => {Some(archive.archive(&path))}
-    };
+    let name = if path.exists() {
+        /*match uninstaller.as_mut() {
+            None => { None }
+            Some(archive) => { Some(archive.archive(&path)) }
+        };*/
 
-    println!("path: {}", path.to_str().unwrap());
+        uninstaller.as_mut().map(|archive| archive.archive(&path))
+    } else {
+        return Err(Error::DoesntExist);
+    };
 
     if path.is_dir() {
-        std::fs::remove_dir_all(&path).unwrap();
+        std::fs::remove_dir_all(&path)?;
     } else if path.is_file() {
-        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_file(&path)?;
     } else {
-        panic!("File is not a path or file");
+        panic!("Path is not a directory or file")
     };
 
-    if let Some(_) = uninstaller {
+    if let Some(list) = inverses {
 
-        if let Some(list) = inverses {
+        //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(path.clone()))]));
+        //list.insert(1, (String::from("data"), vec![Operand::String(name.unwrap())]));
 
-            //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(path.clone()))]));
-            //list.insert(1, (String::from("data"), vec![Operand::String(name.unwrap())]));
 
-        }
+        list.insert(0, format!("__data({:?}, pathtype.absolute({:?}))", name.unwrap(), path))
 
     }
+
+
+    Ok(())
 }
 
-pub fn copy(inverses: Option<& mut Vec<String>>, source: PathType, destination: PathType, temp: & TempDir) {
-    //let source = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
-    //let destination = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+pub fn copy(inverses: Option<&  Inverse>, source: &PathType, destination: &PathType, temp: & TempDir) -> Result<()> {
 
     let source_path = source.to_absolute_path(temp);
     let destination_path = destination.to_absolute_path(temp);
 
     if destination_path.exists() {
-        panic!("{:?}", crate::error::Error::AlreadyExists)
+        return Err(Error::AlreadyExists);
     } else {
         if source_path.is_file() {
 
-            std::fs::copy(&source_path, &destination_path).unwrap();
+            std::fs::copy(&source_path, &destination_path)?;
         } else if source_path.is_dir() {
             let mut options = fs_extra::dir::CopyOptions::default();
             options.content_only = true;
 
-            fs_extra::dir::copy(&source_path, &destination_path, &options).unwrap();
+            fs_extra::dir::copy(&source_path, &destination_path, &options)?;
         } else {
             panic!("Source is not a file or directory");
         }
@@ -133,6 +153,7 @@ pub fn copy(inverses: Option<& mut Vec<String>>, source: PathType, destination: 
                 //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(destination_path.as_path().to_path_buf()))]));
                 //list.insert(1, (String::from("delete"), vec![]));
 
+                list.insert(0, format!("__delete(pathtype.absolute({:?}))", destination_path));
 
             }
 
@@ -140,22 +161,24 @@ pub fn copy(inverses: Option<& mut Vec<String>>, source: PathType, destination: 
         }
     }
 
+    Ok(())
+
 
 }
 
 
 // Not actually an instruction, it is instead used by the other create methods
-pub fn create(uninstaller: Option<& mut OakWrite>, inverses: Option<& mut Vec<String>>) {
+pub fn create(uninstaller: Option<& mut OakWrite>, inverses: Option<& Inverse>) -> Result<()>  {
 
+    Ok(())
 }
 
 
-pub fn zip(inverses: Option<& mut Vec<String>>, archive: PathType, folder: PathType, temp: & TempDir) {
+pub fn zip(inverses: Option<& Inverse>, archive: &PathType, folder: &PathType, temp: & TempDir) -> Result<()>  {
 
-    //let archive = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
-    //let folder = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+    let archive_path = archive.to_absolute_path(temp);
 
-    zip_extensions::write::zip_create_from_directory(&archive.to_absolute_path(temp), &folder.to_absolute_path(temp)).unwrap();
+    zip_extensions::write::zip_create_from_directory(&archive_path, &folder.to_absolute_path(temp))?;
 
     if !archive.is_temp() {
 
@@ -164,18 +187,20 @@ pub fn zip(inverses: Option<& mut Vec<String>>, archive: PathType, folder: PathT
             //list.insert(0, (String::from("push"), vec![Operand::Path(archive)]));
             //list.insert(1, (String::from("delete"), vec![]));
 
+            list.insert(0, format!("__delete(pathtype.absolute({:?}))", archive_path));
         }
     }
+
+    Ok(())
 }
 
-pub fn unzip(inverses: Option<& mut Vec<String>>, archive: PathType, folder: PathType, temp: & TempDir) {
+pub fn unzip(inverses: Option<& Inverse>, archive: &PathType, folder: &PathType, temp: & TempDir) -> Result<()>  {
 
-    //let archive = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
-    //let folder = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
+    let folder_path = folder.to_absolute_path(temp);
 
     //std::fs::create_dir(&folder.path(temp)).unwrap();
 
-    zip_extensions::read::zip_extract(&archive.to_absolute_path(temp), &folder.to_absolute_path(temp)).unwrap();
+    zip_extensions::read::zip_extract(&archive.to_absolute_path(temp), &folder_path)?;
 
     if !archive.is_temp() {
         //Ok(Some(Step::Delete { path: folder.path(temp) }))
@@ -185,20 +210,21 @@ pub fn unzip(inverses: Option<& mut Vec<String>>, archive: PathType, folder: Pat
             //list.insert(0, (String::from("push"), vec![Operand::Path(folder.clone())]));
             //list.insert(1, (String::from("delete"), vec![]));
 
+            list.insert(0, format!("__delete(pathtype.absolute({:?}))", folder_path));
         }
 
 
     }
+
+    Ok(())
 }
 
 
-pub fn download(inverses: Option<& mut Vec<String>>, url: & str, destination: PathType, temp: & TempDir) {
+pub fn download(inverses: Option<& Inverse>, url: & str, destination: &PathType, temp: & TempDir) -> Result<()>  {
 
+    println!("url: {}", url);
 
-    //let url = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-    //let destination = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
-
-    let response = reqwest::blocking::get(url).unwrap();
+    let response = reqwest::blocking::get(url)?;
 
     let file_name = if destination.to_absolute_path(temp).is_dir() {
         let fname = response
@@ -218,7 +244,7 @@ pub fn download(inverses: Option<& mut Vec<String>>, url: & str, destination: Pa
 
 
 
-    let mut dest = std::fs::File::create(file_name.clone()).unwrap();
+    let mut dest = std::fs::File::create(file_name.clone())?;
 
     if !destination.is_temp() {
 
@@ -227,31 +253,30 @@ pub fn download(inverses: Option<& mut Vec<String>>, url: & str, destination: Pa
             //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(file_name.clone()))]));
             //list.insert(1, (String::from("delete"), vec![]));
 
+            list.insert(0, format!("__delete(pathtype.absolute({:?}))", file_name));
         }
     }
 
-    let content = response.text().unwrap();
-    std::io::copy(&mut content.as_bytes(), &mut dest).unwrap();
+    let content = response.text()?;
+    std::io::copy(&mut content.as_bytes(), &mut dest)?;
 
+    Ok(())
 }
 
-pub fn edit(uninstaller: Option<& mut OakWrite>, inverses: Option<& mut Vec<String>>, s: PathType, command: & str, temp: & TempDir) {
+pub fn edit(uninstaller: Option<& OakWrite>, inverses: Option<& Inverse>, s: &PathType, command: & str, temp: & TempDir) -> Result<()>  {
+
 
     use std::io::Write;
-
-    //let command = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-
-    //let s = PathType::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to path"));
 
     let source = s.to_absolute_path(temp);
 
 
     //Load `source`
-    let content = std::fs::read_to_string(source.as_path()).unwrap();
+    let content = std::fs::read_to_string(source.as_path())?;
 
 
     //Perform find and replace
-    let res = sedregex::find_and_replace(content.as_str(), &[command]).unwrap();
+    let res = sedregex::find_and_replace(content.as_str(), &[command])?;
 
 
     match uninstaller {
@@ -267,9 +292,13 @@ pub fn edit(uninstaller: Option<& mut OakWrite>, inverses: Option<& mut Vec<Stri
                     //list.insert(0, (String::from("push"), vec![Operand::Path(s.clone())]));
                     //list.insert(1, (String::from("delete"), vec![]));
 
+                    list.insert(0, format!("__delete(pathtype.absolute({:?}))", source));
 
                     //list.insert(2, (String::from("push"), vec![Operand::Path(s.clone())]));
                     //list.insert(3, (String::from("data"), vec![Operand::String(name)]));
+
+                    list.insert(1, format!("__data({:?}, pathtype.absolute({:?}))", name, source))
+
                 }
 
             }
@@ -279,21 +308,18 @@ pub fn edit(uninstaller: Option<& mut OakWrite>, inverses: Option<& mut Vec<Stri
     }
 
     //Save back to `source`
-    let mut fh = std::fs::OpenOptions::new().write(true).open(source.as_path()).unwrap();
+    let mut fh = std::fs::OpenOptions::new().write(true).open(source.as_path())?;
 
-    fh.write_all(res.as_ref().as_bytes()).unwrap();
+    fh.write_all(res.as_ref().as_bytes())?;
 
+    Ok(())
 
 }
 
 
-pub fn write_reg_key(inverses: Option<& mut Vec<String>>, root: & str, key: & str) {
+pub fn write_reg_key(inverses: Option<& Inverse>, root: & RootKey, key: & str) -> Result<()>  {
 
-
-    //let root = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-    //let key = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-
-    let reg = registry::Hive::from(&RootKey::from(root)); //.open(key, Security::AllAccess)?;
+    let reg = registry::Hive::from(root); //.open(key, Security::AllAccess)?;
 
 
 
@@ -316,7 +342,7 @@ pub fn write_reg_key(inverses: Option<& mut Vec<String>>, root: & str, key: & st
             .map(|(path, _)| path)
     };
 
-    reg.create(key, Security::AllAccess).unwrap();
+    reg.create(key, Security::AllAccess)?;
 
 
     if let Some(p) = common {
@@ -326,18 +352,14 @@ pub fn write_reg_key(inverses: Option<& mut Vec<String>>, root: & str, key: & st
             //list.insert(2, (String::from("reg_delete_key"), vec![]));
         }
     }
+
+    Ok(())
 }
 
 
-pub fn write_reg_value(inverses: Option<& mut Vec<String>>, root: &str, key: &str, value: &str, data: registry::Data) {
+pub fn write_reg_value(inverses: Option<& Inverse>, root: &RootKey, key: &str, value: &str, data: &registry::Data) -> Result<()>  {
 
-
-    //let root = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-    //let key = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-    //let value = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-    //let data = registry::Data::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to registry data type"));
-
-    let reg = registry::Hive::from(&RootKey::from(root)).open(key, Security::AllAccess).unwrap();
+    let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
 
     //For inverses, there are two cases. If the value already exists (i.e. we are modifying it)
     //and if the value does not already exist (i.e. we are creating it). In the first case,
@@ -364,23 +386,21 @@ pub fn write_reg_value(inverses: Option<& mut Vec<String>>, root: &str, key: &st
         }
     }
 
-    reg.set_value(value, &data).unwrap();
+    reg.set_value(value, &data)?;
 
 
     //Ok(Some(inverse))
+
+    Ok(())
 }
 
-pub fn delete_reg_value(inverses: Option<& mut Vec<String>>, root: &str, key: &str, value: &str) {
+pub fn delete_reg_value(inverses: Option<& Inverse>, root: &RootKey, key: &str, value: &str) -> Result<()>  {
 
-    //let root = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-    //let key = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-    //let value = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-
-    let reg = registry::Hive::from(&RootKey::from(root)).open(key, Security::AllAccess).unwrap();
+    let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
 
     let old_value = reg.value(value).unwrap();
 
-    reg.delete_value(value).unwrap();
+    reg.delete_value(value)?;
 
     if let Some(list) = inverses {
 
@@ -392,12 +412,14 @@ pub fn delete_reg_value(inverses: Option<& mut Vec<String>>, root: &str, key: &s
     }
 
 
+    Ok(())
+
 }
 
 fn recursive_recover(
     regkey: &registry::RegKey,
-    rootkey: & str,
-    inverses: & mut Vec<String>,
+    rootkey: & RootKey,
+    inverses: & Inverse,
     index: & mut usize) {
 
     let name = regkey.to_string();
@@ -426,13 +448,9 @@ fn recursive_recover(
     }
 }
 
-pub fn delete_reg_key(inverses: Option<& mut Vec<String>>, root: &str, key: &str) {
+pub fn delete_reg_key(inverses: Option<& Inverse>, root: &RootKey, key: &str) -> Result<()>  {
 
-
-    //let root = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-    //let key = String::try_from(machine.operand_pop()).unwrap_or_else(|_| panic!("Oak Script Error: Could not convert argument to string"));
-
-    let reg = registry::Hive::from(&RootKey::from(root)).open(key, Security::AllAccess).unwrap();
+    let reg = registry::Hive::from(root).open(key, Security::AllAccess)?;
 
 
     if let Some(list) = inverses {
@@ -440,10 +458,12 @@ pub fn delete_reg_key(inverses: Option<& mut Vec<String>>, root: &str, key: &str
         recursive_recover(&reg, root, list, & mut index);
     }
 
-    reg.delete("", true).unwrap(); //Delete the contents of the key
-    reg.delete_self(false).unwrap(); //Delete the key itself
+    reg.delete("", true)?; //Delete the contents of the key
+    reg.delete_self(false)?; //Delete the key itself
 
 
+
+    Ok(())
 
 
 

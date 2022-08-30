@@ -1,9 +1,7 @@
 # Todo
 
 - Clean up the remaining `Result::unrwap()` calls
-- Add closure call back to `unwrap_or_return!` macro (closure maps error to `Operand`)
 - Create some tests to make sure unsuccessful installers unwind correctly
-- Add registry data enums to `Operand` (and add the corresponding match arms to conversion between `registry::Data` and `Operand`)
 - Add flags to any commands with multiplicity (see NSIS commands)
 - Implement create instruction and create shortcut
 - Add a SHIT ton of tests (use a tempdir for this, and create files filled with garbage)
@@ -14,18 +12,12 @@
 - Think about error handling
   - Oak Script errors: Wrong type of argument, for example. non-recoverable
   - Runtime errors: Invalid permissions error. Recoverable
-- Add features to stack_vm to
-  - Peek and poke at an arbitrary item on the stack via an address
-  - Get the stack after `Machine::run` via `Machine::release`
-  - Possibly add a `Machine::Stop` function that supplies a stop reason
 - Convert specs list into a table with 3 columns, step name, action and inverse
 - Add a more comprehensive Oak scripting language
-  - A lexer to convert the script into a list of tokens
-  - Take that list of tokens and convert into an AST
   - A Script that can perform optimisations, and recognise files that can be moved to a temporary directory
   - Create an interpreter that uses the language
     - Enable the interpreter to display the installation progress to the terminal/GUI
   - Add high level install and uninstall functions to oak script
-  - Create python/gdscript style syntax
   - Function to add the uninstaller to a path, and add this to the registry
     - Function to check to see if already installed
+- Return file name from download function

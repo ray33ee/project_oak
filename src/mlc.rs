@@ -1,19 +1,17 @@
-use std::path::{Path, PathBuf};
-use std::result::Result;
+use std::path::{PathBuf};
+use std::sync::Arc;
 use crate::{OakRead, OakWrite};
 
 use crate::path_type::{Inverse, PathType};
 
 use rlua::{Context, FromLua, Lua, Table, Value};
+use rlua::prelude::LuaError;
 use crate::registry_ex::Data;
 
-pub fn thing(path: PathType) {
-    println!("path: {:?}", path);
-
-}
+use crate::error::{Error, Result};
 
 //Take the oak code and run it
-pub fn run(code: & str, install: & OakRead, mut uninstall: Option<& OakWrite>, inverses: Option<& Inverse>, temp: &tempfile::TempDir) -> Result<(), ()> {
+pub fn run(code: & str, install: & OakRead, mut uninstall: Option<& OakWrite>, inverses: Option<& Inverse>, temp: &tempfile::TempDir) -> Result<()> {
 
     let lua = Lua::new();
 
@@ -34,8 +32,8 @@ os.create_dir = __create_dir
 os.create_shortcut = __create_shortcut
 
 -- Clean up
-__move = null
-__copy = null
+--__move = null
+--__copy = null
 __create_dir = null
 __create_shortcut = null
 
@@ -84,36 +82,103 @@ _expanded = null
 _dword = null
 
 
-    {}", code);
+{}
+
+
+    ", code);
 
     lua.context(|ctx| {
         ctx.scope(|scope| {
 
-            ctx.globals().set("__delete",
-                              scope.create_function(|_, path: PathType| {
-                                  crate::functions::delete(uninstall, inverses, &path, temp);
-                                  Ok(())
-                              }).unwrap()
+            let globals = ctx.globals();
+
+            globals.set("__delete",
+                        scope.create_function(|_, path: PathType| {
+                            crate::functions::delete( uninstall, inverses.clone(), &path, temp)?;
+                            Ok(())
+                        }).unwrap()
             ).unwrap();
 
-            ctx.globals().set("__reg",
-                              scope.create_function(|_, data: Data| {
-                                  println!("{:?}", data);
-                                  Ok(())
-                              }).unwrap()
+            globals.set("__move",
+                        scope.create_function(|_, (source, destination): (PathType, PathType)| {
+                            crate::functions::_move(inverses, &source, &destination, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__data",
+                        scope.create_function(|_, (name, destination): (String, PathType)| {
+                            crate::functions::data(install, inverses, &name, &destination, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__copy",
+                        scope.create_function(|_, (source, destination): (PathType, PathType)| {
+                            crate::functions::copy(inverses, &source, &destination, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__zip",
+                        scope.create_function(|_, (archive, folder): (PathType, PathType)| {
+                            crate::functions::zip(inverses, &archive, &folder, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__unzip",
+                        scope.create_function(|_, (archive, folder): (PathType, PathType)| {
+                            crate::functions::unzip(inverses, &archive, &folder, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__download",
+                        scope.create_function(|_, (url, destination): (String, PathType)| {
+                            crate::functions::download(inverses, &url, &destination, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__edit",
+                        scope.create_function(|_, (path, reg): (PathType, String)| {
+                            crate::functions::edit(uninstall, inverses, &path, &reg, temp)?;
+                            Ok(())
+                        }).unwrap()
             ).unwrap();
 
 
 
-            ctx.load(code.as_str()).exec().unwrap();
 
-        });
-    });
+
+
+
+            match ctx.load(code.as_str()).exec() {
+                Ok(_) => {Ok(())}
+                Err(e) => {
+
+                    if let rlua::Error::CallbackError { traceback, cause } = e {
+                        println!("Callback error: {} \n\n{}", traceback, cause.to_string());
+                    } else {
+                        println!("Other error: {}", e);
+                    }
+
+                    println!("Problematic code: \n{}", code);
+
+
+                    Ok(())
+                }
+            }
+
+
+        })
+    })
 
     //Delete the file and io functions
 
     //Add the other oak functions
-    {
+
         //Add our owm oan functions
         // - oak.zip
         // - oak.unzip
@@ -123,7 +188,7 @@ _dword = null
         // - oak.download
         // - oak.edit
 
-    }
+
 
     /*lua.context(|ctx| {
         let f= ctx.create_function(|_, path: PathType| {
@@ -134,7 +199,6 @@ _dword = null
         ctx.globals().set("__test", f).unwrap();
     });*/
 
-    Ok(())
 }
 
 impl<'l> FromLua<'l> for PathType {
@@ -209,7 +273,7 @@ impl<'lua> FromLua<'lua> for Data {
 
                         let pairs: Vec<_> = table.pairs::<Value, Value>().into_iter().map(|x| x.unwrap()).collect();
 
-                        let is_multiline = move || {
+                        let is_multiline = move || -> rlua::Result<_> {
                             let mut multi = vec![None; pairs.len()];
 
                             for (k, v) in pairs {
@@ -223,7 +287,7 @@ impl<'lua> FromLua<'lua> for Data {
                                         return Ok(None)
                                     };
 
-                                    *(multi.get_mut(ind).ok_or(rlua::Error::FromLuaConversionError {
+                                    *(multi.get_mut(ind - 1).ok_or(rlua::Error::FromLuaConversionError {
                                         from: "Vector of Strings",
                                         to: "Data::MultiString",
                                         message: Some("Bad index in multi string lua table".to_string()),
@@ -287,5 +351,12 @@ impl<'lua> FromLua<'lua> for Data {
                 })
             }
         }
+    }
+}
+
+impl From<Error> for LuaError {
+    fn from(e: Error) -> Self {
+        LuaError::ExternalError(Arc::new(e))
+
     }
 }
