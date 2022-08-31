@@ -6,12 +6,14 @@ use crate::path_type::{Inverse, PathType};
 
 use rlua::{Context, FromLua, Lua, Table, Value};
 use rlua::prelude::LuaError;
-use crate::registry_ex::Data;
+use crate::registry_ex::{Data, RootKey};
 
-use crate::error::{Error, Result};
+use crate::error::{Error};
+
+use rlua::Result;
 
 //Take the oak code and run it
-pub fn run(code: & str, install: & OakRead, mut uninstall: Option<& OakWrite>, inverses: Option<& Inverse>, temp: &tempfile::TempDir) -> Result<()> {
+pub fn run(code: & str, install: & OakRead, uninstall: Option<& OakWrite>, inverses: Option<& Inverse>, temp: &tempfile::TempDir) -> Result<()> {
 
     let lua = Lua::new();
 
@@ -78,6 +80,12 @@ registry = {{}}
 registry.expanded = _expanded
 registry.dword = _dword
 
+HKLM =\"HKLM\"
+HKCC =\"HKCC\"
+HKCR =\"HKCR\"
+HKCU =\"HKCU\"
+HKU  = \"HKU\"
+
 _expanded = null
 _dword = null
 
@@ -106,9 +114,30 @@ _dword = null
                         }).unwrap()
             ).unwrap();
 
+            globals.set("__rename",
+                        scope.create_function(|_, (source, destination): (PathType, PathType)| {
+                            crate::functions::_move(inverses, &source, &destination, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
             globals.set("__data",
                         scope.create_function(|_, (name, destination): (String, PathType)| {
                             crate::functions::data(install, inverses, &name, &destination, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__create",
+                        scope.create_function(|_, path: PathType| {
+                            crate::functions::create( inverses, path, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__mkdir",
+                        scope.create_function(|_, path: PathType| {
+                            crate::functions::mkdir( inverses, path, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
@@ -135,15 +164,43 @@ _dword = null
             ).unwrap();
 
             globals.set("__download",
-                        scope.create_function(|_, (url, destination): (String, PathType)| {
-                            crate::functions::download(inverses, &url, &destination, temp)?;
-                            Ok(())
+                        scope.create_function(|_, (url, destination): (String, PathType)| -> rlua::Result<String> {
+                            let f = crate::functions::download(inverses, &url, &destination, temp)?;
+                            Ok(f)
                         }).unwrap()
             ).unwrap();
 
             globals.set("__edit",
                         scope.create_function(|_, (path, reg): (PathType, String)| {
                             crate::functions::edit(uninstall, inverses, &path, &reg, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__reg_write_key",
+                        scope.create_function(|_, (root, key): (RootKey, String)| {
+                            crate::functions::write_reg_key( inverses, &root, &key)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__reg_delete_key",
+                        scope.create_function(|_, (root, key): (RootKey, String)| {
+                            crate::functions::delete_reg_key( inverses, &root, &key)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__reg_write_value",
+                        scope.create_function(|_, (root, key, value, data): (RootKey, String, String, Data)| {
+                            crate::functions::write_reg_value( inverses, &root, &key, &value, &registry::Data::from(&data))?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__reg_delete_value",
+                        scope.create_function(|_, (root, key, value): (RootKey, String, String)| {
+                            crate::functions::delete_reg_value( inverses, &root, &key, &value)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
@@ -158,7 +215,7 @@ _dword = null
                 Ok(_) => {Ok(())}
                 Err(e) => {
 
-                    if let rlua::Error::CallbackError { traceback, cause } = e {
+                    if let rlua::Error::CallbackError { traceback, cause } = &e {
                         println!("Callback error: {} \n\n{}", traceback, cause.to_string());
                     } else {
                         println!("Other error: {}", e);
@@ -167,7 +224,7 @@ _dword = null
                     println!("Problematic code: \n{}", code);
 
 
-                    Ok(())
+                    Err(e.clone())
                 }
             }
 
@@ -226,7 +283,7 @@ impl<'l> FromLua<'l> for PathType {
 }
 
 impl<'lua> FromLua<'lua> for Data {
-    fn from_lua(lua_value: Value<'lua>, lua: Context<'lua>) -> rlua::Result<Self> {
+    fn from_lua(lua_value: Value<'lua>, _lua: Context<'lua>) -> rlua::Result<Self> {
         match lua_value {
             Value::Nil => {Ok(Data::None)}
             Value::Boolean(_) => {
@@ -358,5 +415,35 @@ impl From<Error> for LuaError {
     fn from(e: Error) -> Self {
         LuaError::ExternalError(Arc::new(e))
 
+    }
+}
+
+impl<'lua> FromLua<'lua> for RootKey {
+    fn from_lua(lua_value: Value<'lua>, lua: Context<'lua>) -> rlua::Result<Self> {
+        let rk = String::from_lua(lua_value, lua)?;
+
+        Ok(RootKey::from(rk.as_str()))
+    }
+}
+
+pub fn data_to_code(data: &Data) -> String {
+    match data {
+        Data::None => {format!("null")}
+        Data::String(s) => {format!("{:?}",s)}
+        Data::ExpandString(s) => {format!("registry.expanded({:?})", s)}
+        Data::U32(n) => {format!("{}", n)}
+        Data::MultiString(m) => {
+            let mut s = String::from("{");
+
+            for line in m {
+                s.push_str(format!("{:?}, ", line).as_str());
+            }
+
+            s.push_str("}");
+
+            s
+        }
+        Data::U64(n) => {format!("registry.qword({:?})", n)}
+        _ => {panic!("Invalid data")}
     }
 }

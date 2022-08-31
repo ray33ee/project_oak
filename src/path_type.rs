@@ -46,9 +46,9 @@ impl Inverse {
     }
 
     pub fn combine(&self) -> String {
-        let mut guard = self.0.lock().unwrap();
+        let guard = self.0.lock().unwrap();
 
-        guard.iter().fold(String::new(), |mut source, line| { source.push_str(line); source })
+        guard.iter().fold(String::new(), |mut source, line| { source.push_str(line); source.push_str("\n"); source })
     }
 
 }

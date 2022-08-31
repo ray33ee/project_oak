@@ -1,7 +1,7 @@
 use crate::error::Result;
 use std::fs::OpenOptions;
 use clap::lazy_static::lazy_static;
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use crate::oak::{OakRead, OakWrite};
 use crate::path_type::Inverse;
 
@@ -15,7 +15,7 @@ pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P) -> 
 
     let original_source = std::fs::read_to_string(_source_file).unwrap();
 
-    let mut oak_writer = OakWrite::new(_installer_path.as_ref());
+    let oak_writer = OakWrite::new(_installer_path.as_ref());
 
     //Loop over all data commands, add each file (named as an argument to the data command)
     //replace with argument with the name (returned when a file is added to the archive)
@@ -24,8 +24,43 @@ pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P) -> 
         format!("{}data \"{}\"", &caps[1], name) //We use &cap[1] to preserve the original whitespace (including an end of line line break and maintain readability
     });*/
 
+    let mut quotes = false;
 
-    oak_writer.commands(original_source.as_str());
+    let mut source = String::new();
+
+    let mut file = None;
+
+    for (i, c) in original_source.as_bytes().iter().enumerate() {
+        if *c == '\"' as u8 {
+            quotes = !quotes;
+        } else if *c == '$' as u8 && !quotes {
+
+            if file.is_none() {
+                file = Some(i+1);
+            } else {
+                let start = file.unwrap();
+                let finish = i;
+
+
+                let path = PathBuf::from(&original_source[start+1..finish-1]);
+
+                let name = oak_writer.archive(path);
+
+                source.push_str("\"");
+                source.push_str(name.as_str());
+                source.push_str("\"");
+
+                file = None;
+            }
+            continue;
+        }
+
+        if file.is_none() {
+            source.push(*c as char);
+        }
+    }
+
+    oak_writer.commands(source.as_str());
 
 
 
@@ -33,7 +68,7 @@ pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P) -> 
 
 }
 
-fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) {
+fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) -> bool {
 
     let failed = {
         //Open installer
@@ -47,7 +82,7 @@ fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) {
 
         let temp = tempfile::TempDir::new().unwrap();
 
-        let mut inverses = match &uninstaller {
+        let inverses = match &uninstaller {
             None => {None}
             Some(_) => {Some(Inverse::new())}
         };
@@ -61,11 +96,6 @@ fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) {
             writer.commands(st.as_str())
         }
 
-        if res.is_err() {
-            match res.as_ref().err().unwrap() {
-                _ => {}
-            }
-        }
 
         res.is_err()
     };
@@ -73,21 +103,24 @@ fn _install<P: AsRef<Path>>(installer: P, uninstaller: Option<P>) {
     if failed {
 
         if let Some(u) = uninstaller {
-            _install(u, None);
+            _install(u.as_ref(), None);
+
+
+            std::fs::remove_file(u).unwrap();
         }
 
     }
 
-
+    failed
 }
 
-pub fn install<P: AsRef<Path>>(installer: P, uninstaller: P) {
-    _install(installer, Some(uninstaller));
+pub fn install<P: AsRef<Path>>(installer: P, uninstaller: P) -> bool {
+    _install(installer, Some(uninstaller))
 }
 
-pub fn uninstall<P: AsRef<Path>>(uninstaller: P) {
+pub fn uninstall<P: AsRef<Path>>(uninstaller: P) -> bool {
 
-    _install(uninstaller, None);
+    _install(uninstaller, None)
 }
 
 ///List all the files, folders and commands in an oak repo
@@ -105,7 +138,7 @@ pub fn list<P: AsRef<Path>>(repo: P) -> Result<()> {
         }
     }
 
-    let mut read = OakRead::new(repo.as_ref()).unwrap();
+    let read = OakRead::new(repo.as_ref()).unwrap();
 
     println!("Commands:");
 

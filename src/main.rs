@@ -6,6 +6,7 @@ extern crate zip_extensions;
 extern crate clap;
 extern crate tempfile;
 extern crate registry;
+extern crate core;
 
 use std::path::{Path};
 use oak::{OakRead, OakWrite};
@@ -18,6 +19,7 @@ mod tests;
 mod mlc;
 mod functions;
 mod path_type;
+mod extra_functions;
 
 fn main() {
 
@@ -126,7 +128,7 @@ fn main() {
             if Path::new("installer").exists() {
                 hlc::install("installer", "uninstaller");
             } else if Path::new("uninstaller").exists() {
-                hlc::uninstall("uninstaller")
+                hlc::uninstall("uninstaller");
             } else {
                 panic!("No installer or uninstaller found")
             }

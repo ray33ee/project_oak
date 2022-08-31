@@ -75,7 +75,8 @@ pub enum RootKey {
 
 impl From<&str> for RootKey {
     fn from(s: &str) -> Self {
-        match s {
+
+        match s.to_lowercase().as_str() {
             "hklm" => RootKey::HKLM,
             "hkcc" => RootKey::HKCC,
             "hkcr" => RootKey::HKCR,

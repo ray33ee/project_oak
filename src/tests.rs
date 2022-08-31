@@ -1,7 +1,8 @@
 
 mod tests {
     use std::io::Write;
-    use std::path::{Path, PathBuf};
+    use std::path::{Path};
+    use registry::{Hive, Security};
     use tempfile::TempDir;
     use crate::hlc;
 
@@ -30,17 +31,18 @@ mod tests {
 
         let uninstaller_path = working_path.join("uninstaller");
 
-        hlc::install(installer_path.as_path(), uninstaller_path.as_path());
+        if !hlc::install(installer_path.as_path(), uninstaller_path.as_path()) {
 
-        //Closure to perform installer tests
-        installer_validator(working_path);
+            //Closure to perform installer tests
+            installer_validator(working_path);
 
-        hlc::uninstall(uninstaller_path.as_path());
+            hlc::uninstall(uninstaller_path.as_path());
 
-        //Closure to perform uninstaller tests
-        uninstaller_validator(working_path);
+            //Closure to perform uninstaller tests
+            uninstaller_validator(working_path);
+        }
     }
-/*
+
     #[test]
     fn instruction_data() {
 
@@ -60,9 +62,10 @@ mod tests {
             data_file.write_all(file_data.as_bytes()).unwrap();
 
             format!("
-.main
-    push p\"{}\"
-    data p\"{}\"", output_path.to_string_lossy().as_ref(), data_path.to_string_lossy().as_ref())
+    --Paths in dollar signs will be added to the installer
+    __data(${:?}$, pathtype.absolute({:?}))
+
+", data_path, output_path)
         }, |working_path|{
 
             assert!(working_path.join("extracted").exists());
@@ -74,7 +77,7 @@ mod tests {
         });
 
     }
-*/
+
 
     #[test]
     fn instruction_delete() {
@@ -401,7 +404,7 @@ clap=\"1\"";
         });
 
     }
-/*
+
     #[test]
     fn instruction_reg_write_key() {
 
@@ -410,10 +413,10 @@ clap=\"1\"";
         generic_test(|_working_path| {
 
             format!("
-.main
-    push \"SOFTWARE\\key_test\"
-    push \"hklm\"
-    reg_write_key")
+
+    __reg_write_key(\"hklm\", \"SOFTWARE\\\\key_test\")
+
+    ")
         }, |_working_path|{
 
             Hive::LocalMachine.open("SOFTWARE\\key_test", Security::Read).unwrap();
@@ -439,12 +442,10 @@ clap=\"1\"";
 
 
             format!("
-.main
-    push 100
-    push \"val_name\"
-    push \"SOFTWARE\\val_test\"
-    push \"hklm\"
-    reg_write_value")
+
+__reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
+
+")
         }, |_working_path|{
 
             let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test", Security::AllAccess).unwrap();
@@ -492,12 +493,9 @@ clap=\"1\"";
 
 
             format!("
-.main
-    push 100
-    push \"val_name\"
-    push \"SOFTWARE\\val_test2\"
-    push \"hklm\"
-    reg_write_value")
+    __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test2\", \"val_name\", 100)
+
+")
         }, |_working_path|{
 
             let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test2", Security::AllAccess).unwrap();
@@ -530,6 +528,8 @@ clap=\"1\"";
         bkey.delete_self(false).unwrap();
     }
 
+
+
     #[test]
     fn instruction_reg_delete_val() {
 
@@ -544,11 +544,11 @@ clap=\"1\"";
 
 
             format!("
-.main
-    push \"f\"
-    push \"SOFTWARE\\val_test_delete\"
-    push \"hklm\"
-    reg_delete_value")
+
+
+    __reg_delete_value(HKLM, \"SOFTWARE\\\\val_test_delete\", \"f\")
+
+")
         }, |_working_path|{
             let rkey = Hive::LocalMachine.open("SOFTWARE\\val_test_delete", Security::AllAccess).unwrap();
 
@@ -577,6 +577,10 @@ clap=\"1\"";
     }
 
 
+
+
+
+
     #[test]
     fn instruction_reg_delete_key() {
 
@@ -592,10 +596,10 @@ clap=\"1\"";
         generic_test(|_working_path| {
 
             format!("
-.main
-    push \"SOFTWARE\\instruction_reg_delete_key\"
-    push \"hklm\"
-    reg_delete_key")
+
+    __reg_delete_key(\"hklm\", \"SOFTWARE\\\\instruction_reg_delete_key\")
+
+")
         }, |_working_path|{
 
             Hive::LocalMachine.open("SOFTWARE\\instruction_reg_delete_key\\inner", Security::Read).err().unwrap();
@@ -612,9 +616,13 @@ clap=\"1\"";
 
         });
 
+        let r = Hive::LocalMachine.open("SOFTWARE\\instruction_reg_delete_key", Security::AllAccess).unwrap();
+
+        r.delete("", true).unwrap();
+        r.delete_self(false).unwrap();
     }
 
-*/
+
 
     /*
     #[test]
@@ -624,31 +632,165 @@ clap=\"1\"";
     */
 
     #[test]
-    fn print() {
+    fn interrupted_install() {
+
+
 
         generic_test(|working_path| {
 
+            let sample_path = working_path.join("sample");
+            let copy_path = working_path.join("copy");
+            let third_path = working_path.join("third");
+
+            std::fs::File::create(sample_path.as_path()).unwrap();
 
             format!("
 
-path = \"E:\\\\Software Projects\\\\IntelliJ\\\\project_oak\\\\tmp\\\\file\\\\wpa_supplicant - Copy.conf\"
+    __copy(pathtype.absolute({:?}), pathtype.absolute({:?}))
 
-__delete(pathtype.absolute(path))
+    -- Execution will stop here, and the previous copy should be unwound
+    error()
+
+    __copy(pathtype.absolute({:?}), pathtype.absolute({:?}))
 
 
-
-            ")
-
-
+    ", sample_path, copy_path, sample_path, third_path)
         }, |working_path|{
 
-            assert!(!PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\file\\wpa_supplicant - Copy.conf").exists())
+            assert!(working_path.join("sample").exists());
+            assert!(!working_path.join("copy").exists());
+            assert!(!working_path.join("third").exists());
 
-        }, |working_path|{
+        }, |_working_path|{
 
-            assert!(PathBuf::from("E:\\Software Projects\\IntelliJ\\project_oak\\tmp\\file\\wpa_supplicant - Copy.conf").exists())
+
+
         });
 
     }
+
+    #[test]
+    fn syntax_error() {
+
+
+
+        generic_test(|working_path| {
+
+            let sample_path = working_path.join("sample");
+            let copy_path = working_path.join("copy");
+            let third_path = working_path.join("third");
+
+            std::fs::File::create(sample_path.as_path()).unwrap();
+
+            format!("
+
+    __copy(pathtype.absolute({:?}), pathtype.absolute({:?}))
+
+    -- Execution will stop here, and the previous copy should be unwound
+    not_really_a_function()
+
+    __copy(pathtype.absolute({:?}), pathtype.absolute({:?}))
+
+
+    ", sample_path, copy_path, sample_path, third_path)
+        }, |working_path|{
+
+            assert!(working_path.join("sample").exists());
+            assert!(!working_path.join("copy").exists());
+            assert!(!working_path.join("third").exists());
+
+        }, |_working_path|{
+
+
+
+        });
+
+    }
+
+
+    #[test]
+    fn copy_error() {
+
+
+
+        generic_test(|working_path| {
+
+            let sample_path = working_path.join("sample");
+            let copy_path = working_path.join("copy");
+            let third_path = working_path.join("third");
+
+            std::fs::File::create(sample_path.as_path()).unwrap();
+
+            format!("
+
+    __copy(pathtype.absolute({:?}), pathtype.absolute({:?}))
+
+    -- The following function will fail, and the previous one will be unwound
+    __copy(pathtype.absolute({:?}), pathtype.absolute({:?}))
+
+
+    ", sample_path, copy_path, third_path, sample_path)
+        }, |working_path|{
+
+            assert!(working_path.join("sample").exists());
+            assert!(!working_path.join("copy").exists());
+            assert!(!working_path.join("third").exists());
+
+        }, |_working_path|{
+
+
+
+        });
+
+    }
+
+
+    #[test]
+    fn instruction_create() {
+
+        generic_test(|working_path| {
+
+            let sample_path = working_path.join("file");
+
+            format!("
+
+    __create(pathtype.absolute({:?}))
+
+    ", sample_path)
+        }, |working_path|{
+
+            assert!(working_path.join("file").exists());
+            assert!(working_path.join("file").is_file());
+        }, |working_path|{
+
+            assert!(!working_path.join("file").exists());
+        });
+
+    }
+
+
+    #[test]
+    fn instruction_mkdir() {
+
+        generic_test(|working_path| {
+
+            let sample_path = working_path.join("dir");
+
+            format!("
+
+    __mkdir(pathtype.absolute({:?}))
+
+    ", sample_path)
+        }, |working_path|{
+
+            assert!(working_path.join("dir").exists());
+            assert!(working_path.join("dir").is_dir());
+        }, |working_path|{
+
+            assert!(!working_path.join("dir").exists());
+        });
+
+    }
+
 
 }

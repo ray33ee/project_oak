@@ -2,14 +2,10 @@ use std::path::{Path};
 use registry::Security;
 use tempfile::TempDir;
 use crate::{OakRead, OakWrite};
-use crate::registry_ex::RootKey;
+use crate::registry_ex::{Data, RootKey};
 use crate::path_type::{Inverse, PathType};
 use crate::error::{Error, Result};
-
-//Like most languages, lua needs its backslashes escaped
-pub fn escape_slashes<P: AsRef<Path>>(path: P) -> String {
-    path.as_ref().to_str().unwrap().replace("\\", "\\\\")
-}
+use crate::mlc::data_to_code;
 
 pub fn data(installer: & OakRead, inverses: Option<& Inverse>, name: & str, destination: &PathType, temp: & TempDir) -> Result<()>  {
 
@@ -167,11 +163,48 @@ pub fn copy(inverses: Option<&  Inverse>, source: &PathType, destination: &PathT
 }
 
 
-// Not actually an instruction, it is instead used by the other create methods
-pub fn create(uninstaller: Option<& mut OakWrite>, inverses: Option<& Inverse>) -> Result<()>  {
+pub fn create(inverses: Option<& Inverse>, path: PathType, temp: & TempDir) -> Result<()>  {
+
+    let abs_path = path.to_absolute_path(temp);
+
+    std::fs::File::create(&abs_path)?;
+
+    if !path.is_temp() {
+        if let Some(list) = inverses {
+
+            //list.insert(0, (String::from("push"), vec![Operand::Path(archive)]));
+            //list.insert(1, (String::from("delete"), vec![]));
+
+            list.insert(0, format!("__delete(pathtype.absolute({:?}))", abs_path));
+        }
+    }
 
     Ok(())
 }
+
+
+pub fn mkdir(inverses: Option<& Inverse>, path: PathType, temp: & TempDir) -> Result<()>  {
+
+    let abs_path = path.to_absolute_path(temp);
+
+    std::fs::create_dir(&abs_path)?;
+
+    if !path.is_temp() {
+        if let Some(list) = inverses {
+
+            //list.insert(0, (String::from("push"), vec![Operand::Path(archive)]));
+            //list.insert(1, (String::from("delete"), vec![]));
+
+            list.insert(0, format!("__delete(pathtype.absolute({:?}))", abs_path));
+        }
+    }
+
+    Ok(())
+}
+
+
+
+
 
 
 pub fn zip(inverses: Option<& Inverse>, archive: &PathType, folder: &PathType, temp: & TempDir) -> Result<()>  {
@@ -220,7 +253,7 @@ pub fn unzip(inverses: Option<& Inverse>, archive: &PathType, folder: &PathType,
 }
 
 
-pub fn download(inverses: Option<& Inverse>, url: & str, destination: &PathType, temp: & TempDir) -> Result<()>  {
+pub fn download(inverses: Option<& Inverse>, url: & str, destination: &PathType, temp: & TempDir) -> Result<String>  {
 
     println!("url: {}", url);
 
@@ -260,7 +293,7 @@ pub fn download(inverses: Option<& Inverse>, url: & str, destination: &PathType,
     let content = response.text()?;
     std::io::copy(&mut content.as_bytes(), &mut dest)?;
 
-    Ok(())
+    Ok(file_name.to_str().unwrap().to_string())
 }
 
 pub fn edit(uninstaller: Option<& OakWrite>, inverses: Option<& Inverse>, s: &PathType, command: & str, temp: & TempDir) -> Result<()>  {
@@ -350,6 +383,10 @@ pub fn write_reg_key(inverses: Option<& Inverse>, root: & RootKey, key: & str) -
             //list.insert(0, (String::from("push"), vec![Operand::String(String::from(p.to_str().unwrap()))]));
             //list.insert(1, (String::from("push"), vec![Operand::String(root.clone())]));
             //list.insert(2, (String::from("reg_delete_key"), vec![]));
+
+
+            list.insert(0, format!("__reg_delete_key(\"{:?}\", {:?})", root, p));
+
         }
     }
 
@@ -373,6 +410,9 @@ pub fn write_reg_value(inverses: Option<& Inverse>, root: &RootKey, key: &str, v
             //list.insert(1, (String::from("push"), vec![Operand::String(key.clone())]));
             //list.insert(2, (String::from("push"), vec![Operand::String(root.clone())]));
             //list.insert(3, (String::from("reg_delete_value"), vec![]));
+
+            list.insert(0, format!("__reg_delete_value(\"{:?}\", {:?}, {:?})", root, key, value));
+
         } else {
 
             let old_value = reg.value(value).unwrap();
@@ -383,6 +423,9 @@ pub fn write_reg_value(inverses: Option<& Inverse>, root: &RootKey, key: &str, v
             //list.insert(3, (String::from("push"), vec![Operand::String(root.clone())]));
             //list.insert(4, (String::from("reg_write_value"), vec![]));
 
+            //todo!()
+
+            list.insert(0, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", root, key, value, data_to_code(&Data::from(old_value))));
         }
     }
 
@@ -409,6 +452,10 @@ pub fn delete_reg_value(inverses: Option<& Inverse>, root: &RootKey, key: &str, 
         //list.insert(2, (String::from("push"), vec![Operand::String(key.clone())]));
         //list.insert(3, (String::from("push"), vec![Operand::String(root.clone())]));
         //list.insert(4, (String::from("reg_write_value"), vec![]));
+
+
+        list.insert(0, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", root, key, value, data_to_code(&Data::from(old_value))));
+
     }
 
 
@@ -419,7 +466,7 @@ pub fn delete_reg_value(inverses: Option<& Inverse>, root: &RootKey, key: &str, 
 fn recursive_recover(
     regkey: &registry::RegKey,
     rootkey: & RootKey,
-    inverses: & Inverse,
+    list: & Inverse,
     index: & mut usize) {
 
     let name = regkey.to_string();
@@ -429,7 +476,9 @@ fn recursive_recover(
     //list.insert(*index + 1, (String::from("push"), vec![rootkey.clone()]));
     //list.insert(*index + 2, (String::from("reg_write_key"), vec![]));
 
-    *index = *index + 3;
+    list.insert(*index, format!("__reg_write_key(\"{:?}\", {:?})", rootkey, name));
+
+    *index = *index + 1;
 
     for value in regkey.values().map(|x| x.unwrap()) {
 
@@ -439,12 +488,14 @@ fn recursive_recover(
         //list.insert(*index + 3, (String::from("push"), vec![rootkey.clone()]));
         //list.insert(*index + 4, (String::from("reg_write_value"), vec![]));
 
-        *index = *index + 5;
+        list.insert(*index, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", rootkey, name, value.name().to_string().unwrap(), data_to_code(&Data::from(value.data().clone()))));
+
+        *index = *index + 1;
 
     }
 
     for key in regkey.keys().map(|x| x.unwrap()) {
-        recursive_recover(&key.open(Security::Read).unwrap(), rootkey, inverses, index);
+        recursive_recover(&key.open(Security::Read).unwrap(), rootkey, list, index);
     }
 }
 
