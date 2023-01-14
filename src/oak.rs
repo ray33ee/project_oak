@@ -8,6 +8,80 @@ use zip_extensions::{ZipWriterExtensions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::ops::{DerefMut};
 use std::sync::Mutex;
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize)]
+pub enum OakType {
+    Installer,
+    Uninstaller,
+}
+
+///Describes the location that the uninstaller should be located
+#[derive(Serialize, Deserialize)]
+pub enum UninstallLocation {
+    ///A user specified absolute path
+    Path(PathBuf),
+
+    ///Place it in the same path as the installation directory
+    InstallationDirectory,
+
+    ///For now this is the only supported mode, and just accepts the uninstaller path from the command line
+    CommandLine,
+
+    ///Use this enum if the archive is itself an uninstaller
+    Null,
+}
+
+///Extra information about an installer/uninstaller packaged in the archive
+#[derive(Serialize, Deserialize)]
+pub struct Info {
+    ///Is the archive an installer or an uninstaller
+    pub oak_type: OakType,
+
+    ///Indicates how to obtain the uninstall path
+    pub u_location: UninstallLocation,
+
+    ///If true, the installer will reboot at the end
+    pub reboot: bool,
+
+    ///If set to true, the installer will fail if it isn't elavated
+    pub elevated: bool,
+}
+
+impl Default for Info {
+    fn default() -> Self {
+        Self {
+            oak_type: OakType::Installer,
+            u_location: UninstallLocation::CommandLine,
+            reboot: false,
+            elevated: false,
+        }
+    }
+}
+
+impl Info {
+
+    pub fn set_type(& mut self, oak_type: OakType) -> & mut Self {
+        self.oak_type = oak_type;
+        self
+    }
+
+    pub fn set_uninstaller_location(& mut self, uninstall_location: UninstallLocation) -> & mut Self {
+        self.u_location = uninstall_location;
+        self
+    }
+
+    pub fn set_reboot(& mut self, reboot: bool) -> & mut Self {
+        self.reboot = reboot;
+        self
+    }
+
+    pub fn set_elavated(& mut self, elevated: bool) -> & mut Self {
+        self.elevated = elevated;
+        self
+    }
+
+}
 
 ///A struct used to read an oak archive
 pub struct OakRead {
@@ -30,6 +104,15 @@ impl OakRead {
         let mut res = String::new();
         guard.by_name("_commands")?.read_to_string(& mut res)?;
         Ok(res)
+    }
+
+    ///Get the information in the _info section of the archive
+    pub fn info(& self) -> Result<Info> {
+
+        let mut guard = self.archive.lock().unwrap();
+        let info = serde_json::from_reader(guard.by_name("_info")?)?;
+        Ok(info)
+
     }
 
     ///Extract the specified file `name` to `destination`
@@ -69,7 +152,7 @@ impl OakRead {
 
 ///A struct used to write to an oak archive
 pub struct OakWrite {
-    data: Mutex<(ZipWriter<std::fs::File>, u32)>
+    data: Mutex<(ZipWriter<std::fs::File>, u32)>,
 }
 
 impl OakWrite {
@@ -79,6 +162,8 @@ impl OakWrite {
             data: Mutex::new((ZipWriter::new(OpenOptions::new().create_new(true).write(true).open(path.as_ref()).unwrap()), 0)),
         }
     }
+
+
 
     ///Archive a file or folder into the archive
     pub fn archive<P: AsRef<Path>>(& self, path: P) -> String {
@@ -123,6 +208,18 @@ impl OakWrite {
         }
 
 
+
+    }
+
+    ///Write the info to the _info section of the archive
+    pub fn info(& self, info: &Info) {
+        let mut guard = self.data.lock().unwrap();
+
+        let (archive, _) = guard.deref_mut();
+
+
+        archive.start_file("_info", FileOptions::default()).unwrap();
+        serde_json::to_writer(archive, info).unwrap()
 
     }
 

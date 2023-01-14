@@ -205,6 +205,30 @@ _dword = null
                         }).unwrap()
             ).unwrap();
 
+            globals.set("__directory_contents",
+                        scope.create_function(|_, path: String| {
+                            crate::extra_functions::directory_contents(&PathBuf::from(path))
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__file_type",
+                        scope.create_function(|_, path: String| {
+                            crate::extra_functions::file_type(&PathBuf::from(path))
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__exists",
+                        scope.create_function(|_, path: String| {
+                            crate::extra_functions::exists(&PathBuf::from(path))
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__file_timestamps",
+                        scope.create_function(|_, path: String| {
+                            crate::extra_functions::file_timestamps(&PathBuf::from(path))
+                        }).unwrap()
+            ).unwrap();
+
 
 
 
@@ -281,6 +305,7 @@ impl<'l> FromLua<'l> for PathType {
 
     }
 }
+
 
 impl<'lua> FromLua<'lua> for Data {
     fn from_lua(lua_value: Value<'lua>, _lua: Context<'lua>) -> rlua::Result<Self> {

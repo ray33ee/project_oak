@@ -10,6 +10,7 @@ extern crate core;
 
 use std::path::{Path};
 use oak::{OakRead, OakWrite};
+use crate::oak::UninstallLocation;
 
 mod error;
 mod oak;
@@ -20,6 +21,7 @@ mod mlc;
 mod functions;
 mod path_type;
 mod extra_functions;
+mod higher_functions;
 
 fn main() {
 
@@ -115,7 +117,7 @@ fn main() {
                     let s = matches.value_of("script path").unwrap();
                     let i = matches.value_of("installer path").unwrap();
 
-                    hlc::create_installer(s, i).unwrap();
+                    hlc::create_installer(s, i, UninstallLocation::CommandLine).unwrap();
                     hlc::list(i).unwrap();
 
                 }

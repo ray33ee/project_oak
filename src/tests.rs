@@ -5,6 +5,7 @@ mod tests {
     use registry::{Hive, Security};
     use tempfile::TempDir;
     use crate::hlc;
+    use crate::oak::UninstallLocation;
 
     fn generic_test<S, I, U>(mut source_function: S, mut installer_validator: I, mut uninstaller_validator: U)
     where
@@ -27,7 +28,7 @@ mod tests {
 
         let installer_path = working_path.join("installer");
 
-        hlc::create_installer(source_path.as_path(), installer_path.as_path()).unwrap();
+        hlc::create_installer(source_path.as_path(), installer_path.as_path(), UninstallLocation::CommandLine).unwrap();
 
         let uninstaller_path = working_path.join("uninstaller");
 
@@ -41,6 +42,61 @@ mod tests {
             //Closure to perform uninstaller tests
             uninstaller_validator(working_path);
         }
+    }
+
+    #[test]
+    fn execute_test() {
+
+
+        let file_data = "this is some
+
+
+        random data to load into the file.";
+
+        let working = TempDir::new().unwrap();
+        let working_path = working.path();
+
+        //Closure to create code
+        let source_code = {
+
+            let sample_path = working_path.join("sample");
+
+            let mut data_file = std::fs::File::create(sample_path.as_path()).unwrap();
+
+            data_file.write_all(file_data.as_bytes()).unwrap();
+
+            format!("
+    __delete(pathtype.absolute({:?}))
+", sample_path)
+
+        };
+
+        let source_path = working_path.join("source");
+
+        let mut source = std::fs::File::create(&source_path).unwrap();
+
+        source.write_all(source_code.as_bytes()).unwrap();
+
+        let installer_path = working_path.join("installer");
+
+        hlc::create_installer(source_path.as_path(), installer_path.as_path(), UninstallLocation::CommandLine).unwrap();
+
+        let uninstaller_path = working_path.join("uninstaller");
+
+        if !hlc::execute(installer_path.as_path(), Some(uninstaller_path.as_path())) {
+
+            //Closure to perform installer tests
+
+            assert!(!working_path.join("sample").exists());
+
+            hlc::execute(uninstaller_path.as_path(), None);
+
+            //Closure to perform uninstaller tests
+            assert!(working_path.join("sample").exists());
+
+            assert_eq!(std::fs::read_to_string(working_path.join("sample")).unwrap().as_str(), file_data);
+        }
+
     }
 
     #[test]
@@ -788,6 +844,32 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
         }, |working_path|{
 
             assert!(!working_path.join("dir").exists());
+        });
+
+    }
+
+
+
+    #[test]
+    fn _test_test() {
+
+
+
+        generic_test(|working_path| {
+
+            format!("
+    thing = __file_timestamps(\"\")
+
+    print(os.date(\"%Y-%m-%d %H:%M:%S\", thing.modified))
+    print(os.date(\"%Y-%m-%d %H:%M:%S\", thing.accessed))
+    print(os.date(\"%Y-%m-%d %H:%M:%S\", thing.created))
+
+")
+        }, |working_path|{
+
+
+        }, |working_path|{
+
         });
 
     }

@@ -1,6 +1,6 @@
 [package]
 name = "project_oak"
-version = "0.1.17"
+version = "0.1.18"
 edition = "2021"
 description = "Proof of concept for a action/inverse and step/command based installer and inferred uninstaller"
 
@@ -19,3 +19,5 @@ sedregex = "0.2.5"
 regex = "1.6.0"
 lazy_static = "1.4.0"
 rlua = "0.19.4"
+serde = { version = "1.0.152", features = ["derive"] }
+serde_json = "1.0.91"

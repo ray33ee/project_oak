@@ -15,6 +15,7 @@ pub enum Error {
     Reqwest(reqwest::Error),
     Registry(registry::Error),
     SedRegex(sedregex::ErrorKind),
+    SerdeJson(serde_json::Error),
 }
 
 impl Display for Error {
@@ -60,5 +61,11 @@ impl From<registry::value::Error> for Error {
 impl From<sedregex::ErrorKind> for Error {
     fn from(e: ErrorKind) -> Self {
         Error::SedRegex(e)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Error::SerdeJson(e)
     }
 }
