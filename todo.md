@@ -1,11 +1,10 @@
 # Todo
 
-- Create a builder class for the `Info` struct
 - Figure out how to add the installer to the .data portion of executables
   - Create two executables, differing only in .data size and compare
 - Use scoped name (os.rename) instead of temporary names (__rename)
 - Add flags to any commands with multiplicity (see NSIS commands)
-- Implement 'create' instruction and 'create shortcut'
+- Implement 'create shortcut'
 - Add function to change file attributes
 - Add extra functions
 - Add special windows variables (%appdata%, %programfiles%, etc.)

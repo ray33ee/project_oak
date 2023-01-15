@@ -13,8 +13,7 @@ Misc
 */
 
 use std::collections::HashMap;
-use std::hash::Hash;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::time::SystemTime;
 use rlua::Result;
 

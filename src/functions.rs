@@ -1,4 +1,5 @@
-use std::path::{Path};
+use std::path::{Path, PathBuf};
+use std::str::from_utf8_unchecked;
 use registry::Security;
 use tempfile::TempDir;
 use crate::{OakRead, OakWrite};
@@ -163,7 +164,7 @@ pub fn copy(inverses: Option<&  Inverse>, source: &PathType, destination: &PathT
 }
 
 
-pub fn create(inverses: Option<& Inverse>, path: PathType, temp: & TempDir) -> Result<()>  {
+/*pub fn create(inverses: Option<& Inverse>, path: PathType, temp: & TempDir) -> Result<()>  {
 
     let abs_path = path.to_absolute_path(temp);
 
@@ -180,7 +181,7 @@ pub fn create(inverses: Option<& Inverse>, path: PathType, temp: & TempDir) -> R
     }
 
     Ok(())
-}
+}*/
 
 
 pub fn mkdir(inverses: Option<& Inverse>, path: PathType, temp: & TempDir) -> Result<()>  {
@@ -518,4 +519,49 @@ pub fn delete_reg_key(inverses: Option<& Inverse>, root: &RootKey, key: &str) ->
 
 
 
+}
+
+pub fn file_open(mut uninstaller: Option<& OakWrite>, inverses: Option<& Inverse>, path: PathType, mode: String) -> Result<()> {
+
+    match path {
+        PathType::Absolute(abs_path) => {
+            let bytes = if mode.as_bytes()[mode.len() - 1] == 'b' as u8 {
+                &mode.as_bytes()[..mode.len() - 1]
+            } else {
+                &mode.as_bytes()
+            };
+
+
+
+            unsafe {
+                match from_utf8_unchecked(bytes) {
+                    "r" | "r+" => {} //Do nothing
+                    "w" | "a" | "w+" | "a+" => {
+                        if PathBuf::from(&abs_path).exists() {
+                            //Backup the original file
+                            let name = uninstaller.as_mut().map(|archive| archive.archive(&abs_path)).unwrap();
+
+                            if let Some(list) = inverses {
+                                list.insert(0, format!("__data({:?}, pathtype.absolute({:?}))", name, &abs_path))
+                            }
+                        } else {
+                            //
+                            if let Some(list) = inverses {
+
+                                list.insert(0, format!("__delete(pathtype.absolute({:?}))", &abs_path));
+                            }
+                        }
+                    }
+
+
+                    _ => {}
+                }
+            }
+        }
+        PathType::Temporary(_) => {}
+    }
+
+
+
+    Ok(())
 }

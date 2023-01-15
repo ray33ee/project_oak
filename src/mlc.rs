@@ -21,6 +21,7 @@ pub fn run(code: & str, install: & OakRead, uninstall: Option<& OakWrite>, inver
     let code = format!("
 -- Delete the tmpname and execute functions
 os.tmpname = null
+io.tmpfile = null
 os.execute = null
 
 -- Redefine remove and rename
@@ -89,6 +90,11 @@ HKU  = \"HKU\"
 _expanded = null
 _dword = null
 
+function _open (filename, mode)
+    __file_open(filename, mode)
+    return io.open(filename.path, mode)
+end
+
 
 {}
 
@@ -128,12 +134,12 @@ _dword = null
                         }).unwrap()
             ).unwrap();
 
-            globals.set("__create",
+            /*globals.set("__create",
                         scope.create_function(|_, path: PathType| {
                             crate::functions::create( inverses, path, temp)?;
                             Ok(())
                         }).unwrap()
-            ).unwrap();
+            ).unwrap();*/
 
             globals.set("__mkdir",
                         scope.create_function(|_, path: PathType| {
@@ -226,6 +232,13 @@ _dword = null
             globals.set("__file_timestamps",
                         scope.create_function(|_, path: String| {
                             crate::extra_functions::file_timestamps(&PathBuf::from(path))
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__file_open",
+                        scope.create_function(|_, (path, mode): (PathType, String)| {
+                            crate::functions::file_open(uninstall, inverses, path, mode)?;
+                            Ok(())
                         }).unwrap()
             ).unwrap();
 

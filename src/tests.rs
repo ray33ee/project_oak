@@ -801,7 +801,7 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
     }
 
 
-    #[test]
+    /*#[test]
     fn instruction_create() {
 
         generic_test(|working_path| {
@@ -822,7 +822,7 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
             assert!(!working_path.join("file").exists());
         });
 
-    }
+    }*/
 
 
     #[test]
@@ -849,13 +849,78 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
     }
 
 
+    #[test]
+    fn file_open_test_overwrite() {
+
+        let file_data = "this is some
+
+
+        random data to load into the file.";
+
+        generic_test(|working_path| {
+
+            let sample_path = working_path.join("file");
+
+            let mut data_file = std::fs::File::create(sample_path.as_path()).unwrap();
+
+            data_file.write_all(file_data.as_bytes()).unwrap();
+
+            format!("
+
+    _open(pathtype.absolute({:?}), \"w\")
+
+    ", sample_path)
+        }, |working_path|{
+
+            assert!(working_path.join("file").exists());
+
+            assert_eq!(std::fs::read_to_string(working_path.join("file")).unwrap().len(), 0)
+        }, |working_path|{
+
+            assert!(working_path.join("file").exists());
+
+
+            assert_eq!(std::fs::read_to_string(working_path.join("file")).unwrap(), file_data)
+
+        });
+
+    }
+
+
+
+    #[test]
+    fn file_open_test_create() {
+
+
+
+        generic_test(|working_path| {
+
+            let sample_path = working_path.join("file");
+
+            format!("
+
+    _open(pathtype.absolute({:?}), \"w\")
+
+    ", sample_path)
+        }, |working_path|{
+
+            assert!(working_path.join("file").exists());
+        }, |working_path|{
+
+            assert!(!working_path.join("file").exists());
+
+        });
+
+    }
+
+
 
     #[test]
     fn _test_test() {
 
 
 
-        generic_test(|working_path| {
+        generic_test(|_| {
 
             format!("
     thing = __file_timestamps(\"\")
@@ -865,10 +930,10 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
     print(os.date(\"%Y-%m-%d %H:%M:%S\", thing.created))
 
 ")
-        }, |working_path|{
+        }, |_|{
 
 
-        }, |working_path|{
+        }, |_|{
 
         });
 

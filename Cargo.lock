@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "project_oak"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "clap",
  "fs_extra",
