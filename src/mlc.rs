@@ -4,8 +4,8 @@ use crate::{OakRead, OakWrite};
 
 use crate::path_type::{Inverse, PathType};
 
-use rlua::{Context, FromLua, Lua, Table, Value};
-use rlua::prelude::LuaError;
+use rlua::{Context, FromLua, Lua, Table, ToLua, Value};
+use rlua::prelude::{LuaError};
 use crate::registry_ex::{Data, RootKey};
 
 use crate::error::{Error};
@@ -31,14 +31,6 @@ os.rename = __rename
 -- Add the following functions
 os.move = __move
 os.copy = __copy
-os.create_dir = __create_dir
-os.create_shortcut = __create_shortcut
-
--- Clean up
---__move = null
---__copy = null
-__create_dir = null
-__create_shortcut = null
 
 -- PathType functions
 
@@ -70,16 +62,16 @@ function _expanded (s)
     return res
 end
 
-function _dword (n)
+function _qword (n)
     local res = {{}}
-    res.ident = \"dword\"
+    res.ident = \"qword\"
     res.value = n
     return res
 end
 
 registry = {{}}
 registry.expanded = _expanded
-registry.dword = _dword
+registry.qword = _qword
 
 HKLM =\"HKLM\"
 HKCC =\"HKCC\"
@@ -88,12 +80,40 @@ HKCU =\"HKCU\"
 HKU  = \"HKU\"
 
 _expanded = null
-_dword = null
+_qword = null
+
+____io_open = io.open
 
 function _open (filename, mode)
     __file_open(filename, mode)
-    return io.open(filename.path, mode)
+    return ____io_open(filename.path, mode)
 end
+
+io.open = _open
+
+_open = null
+
+oak = {{}}
+oak.delete = __delete
+oak.move = __move
+oak.rename = __rename
+oak.data = __data
+oak.mkdir = __mkdir
+oak.copy = __copy
+oak.zip = __zip
+oak.unzip = __unzip
+oak.download = __download
+oak.edit = _edit
+oak.reg_write_key = __reg_write_key
+oak.reg_delete_key = __reg_delete_key
+oak.reg_write_value = __reg_write_value
+oak.reg_delete_value = __reg_delete_value
+
+oak.directory_contents = __directory_contents
+oak.file_type = __file_type
+oak.exists = __exists
+oak.file_timestamps = __file_timestamps
+oak.get_registry_data = __get_registry_data
 
 
 {}
@@ -242,6 +262,12 @@ end
                         }).unwrap()
             ).unwrap();
 
+            globals.set("__get_registry_data",
+                        scope.create_function(|c, (root, key): (String, String)| {
+                            crate::extra_functions::get_registry_data(c, &RootKey::from(root.as_str()), key)
+                        }).unwrap()
+            ).unwrap();
+
 
 
 
@@ -346,7 +372,7 @@ impl<'lua> FromLua<'lua> for Data {
                     Ok(ident) => {
 
                         match ident.as_str() {
-                            "dword" => {
+                            "qword" => {
                                 let val = table.get::<& str, u64>("value")?;
                                 Ok(Data::U64(val))
                             },
@@ -448,6 +474,44 @@ impl<'lua> FromLua<'lua> for Data {
         }
     }
 }
+
+impl<'lua> ToLua<'lua> for Data {
+    fn to_lua(self, lua: Context<'lua>) -> Result<Value<'lua>> {
+        match self {
+            Data::None => {Ok(Value::Nil)}
+            Data::String(s) => {Ok(Value::String(lua.create_string(&s).unwrap()))}
+            Data::ExpandString(s) => {
+                let table = lua.create_table().unwrap();
+
+                table.set(Value::String(lua.create_string("value").unwrap()), Value::String(lua.create_string(&s).unwrap()))?;
+                table.set(Value::String(lua.create_string("ident").unwrap()), Value::String(lua.create_string("expanded").unwrap()))?;
+
+                Ok(Value::Table(table))
+            }
+            Data::Binary(b) => {Ok(Value::Table(lua.create_sequence_from(b)?))}
+            Data::U32(n) => {Ok(Value::Integer(n.into()))}
+            Data::U32BE(_) => {todo!()}
+            Data::Link => {Ok(Value::Nil)}
+            Data::MultiString(ms) => {
+
+                Ok(Value::Table(lua.create_sequence_from(ms)?))
+            }
+            Data::ResourceList => {Ok(Value::Nil)}
+            Data::FullResourceDescriptor => {Ok(Value::Nil)}
+            Data::ResourceRequirementsList => {Ok(Value::Nil)}
+            Data::U64(n) => {
+
+                let table = lua.create_table().unwrap();
+
+                table.set(Value::String(lua.create_string("value").unwrap()), Value::Integer(n as i64))?;
+                table.set(Value::String(lua.create_string("ident").unwrap()), Value::String(lua.create_string("qword").unwrap()))?;
+
+                Ok(Value::Table(table))
+            }
+        }
+    }
+}
+
 
 impl From<Error> for LuaError {
     fn from(e: Error) -> Self {

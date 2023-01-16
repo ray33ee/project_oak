@@ -867,7 +867,7 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
 
             format!("
 
-    _open(pathtype.absolute({:?}), \"w\")
+    io.open(pathtype.absolute({:?}), \"w\")
 
     ", sample_path)
         }, |working_path|{
@@ -899,7 +899,7 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
 
             format!("
 
-    _open(pathtype.absolute({:?}), \"w\")
+    io.open(pathtype.absolute({:?}), \"w\")
 
     ", sample_path)
         }, |working_path|{
@@ -915,29 +915,6 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
 
 
 
-    #[test]
-    fn _test_test() {
-
-
-
-        generic_test(|_| {
-
-            format!("
-    thing = __file_timestamps(\"\")
-
-    print(os.date(\"%Y-%m-%d %H:%M:%S\", thing.modified))
-    print(os.date(\"%Y-%m-%d %H:%M:%S\", thing.accessed))
-    print(os.date(\"%Y-%m-%d %H:%M:%S\", thing.created))
-
-")
-        }, |_|{
-
-
-        }, |_|{
-
-        });
-
-    }
 
 
 }

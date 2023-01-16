@@ -2,7 +2,6 @@
 
 - Figure out how to add the installer to the .data portion of executables
   - Create two executables, differing only in .data size and compare
-- Use scoped name (os.rename) instead of temporary names (__rename)
 - Add flags to any commands with multiplicity (see NSIS commands)
 - Implement 'create shortcut'
 - Add function to change file attributes
@@ -15,8 +14,8 @@
 - Add high level install and uninstall functions to oak script (to install and uninstall 3rd party)
 - Function to check to see if already installed
 - Add function that adds an uninstaller entry to HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall
-- Convert specs list into a table with 3 columns, step name, action and inverse
 - Add reg_append/remove_multi_key function that adds/removes a line from a multiline value 
 - Add some path-specific functions (the inverses remove the added path, instead of saving the original path value)
 - Create a third path type, one that (like Temporary) does not create inverses. 
   - Change is_temp() function to needs_inverse() function
+

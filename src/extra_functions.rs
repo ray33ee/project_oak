@@ -15,7 +15,9 @@ Misc
 use std::collections::HashMap;
 use std::path::{Path};
 use std::time::SystemTime;
-use rlua::Result;
+use registry::Security;
+use rlua::{Context, Result, Value};
+use crate::registry_ex::{RootKey};
 
 pub fn directory_contents(path: &Path) -> Result<HashMap<String, Vec<String>>> {
     let mut map = HashMap::new();
@@ -76,4 +78,34 @@ pub fn file_timestamps(path: &Path) -> Result<HashMap<String, Option<u64>>> {
     stamps.insert("accessed".to_string(), system_time_to_epoch(m.accessed()));
 
     Ok(stamps)
+}
+
+pub fn get_registry_data<'l>(c: Context<'l>, root: &RootKey, key: String) -> Result<rlua::Table<'l>> {
+
+    let reg = registry::Hive::from(root).open(key, Security::Read).unwrap();
+
+    let table = c.create_table().unwrap();
+
+    let mut subkeys = vec![];
+    let mut kv_pairs = HashMap::new();
+
+
+    for key in reg.keys() {
+
+        if let Ok(r) = key {
+            subkeys.push(r.to_string());
+        }
+    }
+
+    for value in reg.values() {
+        if let Ok(v) = value {
+            kv_pairs.insert(v.name().to_string_lossy(), crate::registry_ex::Data::from(v.data().clone()));
+        }
+    }
+
+    table.set(Value::String(c.create_string("subkeys")?), c.create_sequence_from(subkeys)?)?;
+    table.set(Value::String(c.create_string("kv_pairs")?), c.create_table_from(kv_pairs)?)?;
+
+
+    Ok(table)
 }
