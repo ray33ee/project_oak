@@ -56,29 +56,19 @@ pub fn _move(inverses: Option<& Inverse>, source: & PathType, destination: & Pat
 
         if !d.is_temp() {
             if let Some(list) = inverses {
-                match &source {
-                    PathType::Absolute(s) => {
 
 
-                        //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(s.clone()))]));
-                        //list.insert(1, (String::from("push"), vec![Operand::Path(PathType::Absolute(destination))]));
-                        //list.insert(2, (String::from("move"), vec![]));
+                if source.is_temp() {
 
-                        //Ok(Some(Step::Move { source: SpecialPath::Path(destination.clone()), destination: s.clone() }))
+                    list.insert(0, format!("__delete(pathtype.absolute({:?}))", destination));
+                } else {
 
-                        list.insert(0, format!("__move(pathtype.absolute({:?}), pathtype.absolute({:?}))", destination, s));
-                    }
-                    PathType::Temporary(_) => {
+                    let abs = source.to_absolute_path(temp);
 
 
-                        //list.insert(0, (String::from("push"), vec![Operand::Path(PathType::Absolute(destination))]));
-                        //list.insert(1, (String::from("delete"), vec![]));
-
-                        //Ok(Some(Step::Delete { path: destination.clone() }))
-
-                        list.insert(0, format!("__delete(pathtype.absolute({:?}))", destination));
-                    }
+                    list.insert(0, format!("__move(pathtype.absolute({:?}), pathtype.absolute({:?}))", destination, abs));
                 }
+
             }
         }
     }
@@ -102,7 +92,7 @@ pub fn delete(mut uninstaller: Option<& OakWrite>, inverses: Option<&Inverse>, p
 
     if path.is_dir() {
         std::fs::remove_dir_all(&path)?;
-    } else if path.is_file() {
+    } else if path.is_file() || path.is_symlink() {
         std::fs::remove_file(&path)?;
     } else {
         panic!("Path is not a directory or file")
@@ -183,6 +173,38 @@ pub fn copy(inverses: Option<&  Inverse>, source: &PathType, destination: &PathT
     Ok(())
 }*/
 
+pub fn create_symlink(inverses: Option<& Inverse>, original: &PathType, link: &PathType, temp: & TempDir) -> Result<()> {
+
+    //Neither path can be a tmp path as this doesnt make much sense
+
+
+    if !original.is_temp() && !link.is_temp() {
+
+        let original = original.to_absolute_path(temp);
+        let link = link.to_absolute_path(temp);
+
+        if original.is_file() {
+            std::os::windows::fs::symlink_file(original, &link)?;
+
+            if let Some(list) = inverses {
+                list.insert(0, format!("__delete(pathtype.absolute({:?}))", link));
+            }
+        } else if original.is_dir() {
+            std::os::windows::fs::symlink_dir(original, &link)?;
+
+            if let Some(list) = inverses {
+                list.insert(0, format!("__delete(pathtype.absolute({:?}))", link));
+            }
+        }
+
+
+
+    }
+
+
+
+    Ok(())
+}
 
 pub fn mkdir(inverses: Option<& Inverse>, path: PathType, temp: & TempDir) -> Result<()>  {
 
@@ -205,7 +227,31 @@ pub fn mkdir(inverses: Option<& Inverse>, path: PathType, temp: & TempDir) -> Re
 
 
 
+pub fn set_attributes(inverses: Option<& Inverse>, path: &PathType, attributes: u32, temp: &TempDir) -> Result<()> {
 
+
+    use winapi::um::fileapi::SetFileAttributesA;
+
+    let abs_path = path.to_absolute_path(temp);
+
+    let current_atts = crate::extra_functions::get_attributes(abs_path.as_path()).unwrap();
+
+    let abs_str = abs_path.to_str().unwrap().as_bytes();
+
+    unsafe {
+        let pointer = abs_str.as_ptr() as *const i8;
+
+        SetFileAttributesA(pointer, attributes);
+    }
+
+    if !path.is_temp() {
+        if let Some(list) = inverses {
+            list.insert(0, format!("__set_attributes(pathtype.absolute({:?}), {})", abs_path, current_atts));
+        }
+    }
+
+    Ok(())
+}
 
 
 pub fn zip(inverses: Option<& Inverse>, archive: &PathType, folder: &PathType, temp: & TempDir) -> Result<()>  {
@@ -255,8 +301,6 @@ pub fn unzip(inverses: Option<& Inverse>, archive: &PathType, folder: &PathType,
 
 
 pub fn download(inverses: Option<& Inverse>, url: & str, destination: &PathType, temp: & TempDir) -> Result<String>  {
-
-    println!("url: {}", url);
 
     let response = reqwest::blocking::get(url)?;
 
@@ -521,47 +565,44 @@ pub fn delete_reg_key(inverses: Option<& Inverse>, root: &RootKey, key: &str) ->
 
 }
 
-pub fn file_open(mut uninstaller: Option<& OakWrite>, inverses: Option<& Inverse>, path: PathType, mode: String) -> Result<()> {
+pub fn file_open(mut uninstaller: Option<& OakWrite>, inverses: Option<& Inverse>, path: PathType, mode: String, temp: &TempDir) -> Result<()> {
 
-    match path {
-        PathType::Absolute(abs_path) => {
-            let bytes = if mode.as_bytes()[mode.len() - 1] == 'b' as u8 {
-                &mode.as_bytes()[..mode.len() - 1]
-            } else {
-                &mode.as_bytes()
-            };
+    if !path.is_temp() {
+        let abs_path = path.to_absolute_path(temp);
+
+        let bytes = if mode.as_bytes()[mode.len() - 1] == 'b' as u8 {
+            &mode.as_bytes()[..mode.len() - 1]
+        } else {
+            &mode.as_bytes()
+        };
 
 
 
-            unsafe {
-                match from_utf8_unchecked(bytes) {
-                    "r" | "r+" => {} //Do nothing
-                    "w" | "a" | "w+" | "a+" => {
-                        if PathBuf::from(&abs_path).exists() {
-                            //Backup the original file
-                            let name = uninstaller.as_mut().map(|archive| archive.archive(&abs_path)).unwrap();
+        unsafe {
+            match from_utf8_unchecked(bytes) {
+                "r" | "r+" => {} //Do nothing
+                "w" | "a" | "w+" | "a+" => {
+                    if PathBuf::from(&abs_path).exists() {
+                        //Backup the original file
+                        let name = uninstaller.as_mut().map(|archive| archive.archive(&abs_path)).unwrap();
 
-                            if let Some(list) = inverses {
-                                list.insert(0, format!("__data({:?}, pathtype.absolute({:?}))", name, &abs_path))
-                            }
-                        } else {
-                            //
-                            if let Some(list) = inverses {
+                        if let Some(list) = inverses {
+                            list.insert(0, format!("__data({:?}, pathtype.absolute({:?}))", name, &abs_path))
+                        }
+                    } else {
+                        //
+                        if let Some(list) = inverses {
 
-                                list.insert(0, format!("__delete(pathtype.absolute({:?}))", &abs_path));
-                            }
+                            list.insert(0, format!("__delete(pathtype.absolute({:?}))", &abs_path));
                         }
                     }
-
-
-                    _ => {}
                 }
+
+
+                _ => {}
             }
         }
-        PathType::Temporary(_) => {}
     }
-
-
 
     Ok(())
 }

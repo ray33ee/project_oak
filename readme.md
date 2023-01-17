@@ -14,6 +14,9 @@ is to move the file from B to A.
 During installation each command that is executed saves its inverse in a list. The uninstaller then executes these inverses in reverse
 order to complete the uninstallation.
 
+Please note: All writes to the target machine during installation will be undone during uninstall. If you wish to have locations that are preserved
+after uninstall, they should be located outside any installation directory and created by the application itself (not the installer)
+
 ## Temporary location
 
 Some steps do not really need inverses. Say we move a file from A to B and rename this file (B) to C. The inverse would be a rename followed by a 

@@ -1,7 +1,7 @@
 
 mod tests {
     use std::io::Write;
-    use std::path::{Path};
+    use std::path::{Path, PathBuf};
     use registry::{Hive, Security};
     use tempfile::TempDir;
     use crate::hlc;
@@ -186,14 +186,6 @@ mod tests {
             let mut data_file = std::fs::File::create(from_path.as_path()).unwrap();
 
             data_file.write_all(file_data.as_bytes()).unwrap();
-
-            println!("{}", format!("
-
-
-    __move(pathtype.absolute({:?}), pathtype.absolute({:?}))
-
-
-", from_path, to_path));
 
             format!("
 
@@ -679,14 +671,6 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
     }
 
 
-
-    /*
-    #[test]
-    fn unwind_test() {
-
-    }
-    */
-
     #[test]
     fn interrupted_install() {
 
@@ -801,28 +785,6 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
     }
 
 
-    /*#[test]
-    fn instruction_create() {
-
-        generic_test(|working_path| {
-
-            let sample_path = working_path.join("file");
-
-            format!("
-
-    __create(pathtype.absolute({:?}))
-
-    ", sample_path)
-        }, |working_path|{
-
-            assert!(working_path.join("file").exists());
-            assert!(working_path.join("file").is_file());
-        }, |working_path|{
-
-            assert!(!working_path.join("file").exists());
-        });
-
-    }*/
 
 
     #[test]
@@ -913,7 +875,135 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
 
     }
 
+    #[test]
+    fn instruction_create_symlink_file() {
 
+        let file_data = "this is some
+
+
+        random data to load into the file.";
+
+        generic_test(|working_path| {
+
+            let original = working_path.join("original");
+
+            let link = working_path.join("link");
+
+            let mut data_file = std::fs::File::create(original.as_path()).unwrap();
+
+            data_file.write_all(file_data.as_bytes()).unwrap();
+
+            format!("
+    __create_symlink(pathtype.absolute({:?}), pathtype.absolute({:?}))
+", original, link)
+        }, |working_path|{
+
+            assert!(working_path.join("original").exists());
+            assert!(working_path.join("link").exists());
+
+            assert_eq!(std::fs::read_to_string(working_path.join("link")).unwrap().as_str(), file_data);
+
+        }, |working_path|{
+            assert!(working_path.join("original").exists());
+            assert!(!working_path.join("link").exists());
+
+            assert_eq!(std::fs::read_to_string(working_path.join("original")).unwrap().as_str(), file_data);
+        });
+
+    }
+
+
+    #[test]
+    fn instruction_create_symlink_dir() {
+
+
+        generic_test(|working_path| {
+
+            let original = working_path.join("original");
+
+            let link = working_path.join("link");
+
+            std::fs::create_dir(&original).unwrap();
+
+            std::fs::File::create(original.join("file")).unwrap();
+
+
+
+            format!("
+    __create_symlink(pathtype.absolute({:?}), pathtype.absolute({:?}))
+", original, link)
+        }, |working_path|{
+
+            assert!(working_path.join("original").exists());
+            assert!(working_path.join("link").exists());
+            assert!(working_path.join("link").join("file").exists());
+
+
+        }, |working_path|{
+            assert!(working_path.join("original").exists());
+            assert!(!working_path.join("link").exists());
+            assert!(!working_path.join("link").join("file").exists());
+
+        });
+
+    }
+
+    #[test]
+    fn special_path_test() {
+
+        let file_path = PathBuf::from(std::env::var("APPDATA").unwrap()).join("file");
+
+        generic_test(|_| {
+
+
+            format!("
+
+    io.open(pathtype.special(pathtype.AppData, \"file\"), \"w\")
+
+
+    ")
+        }, |_|{
+
+            assert!(file_path.exists());
+        }, |_|{
+
+            assert!(!file_path.exists());
+
+        });
+
+    }
+
+    #[test]
+    fn modify_attributes_test() {
+
+        use crate::extra_functions::get_attributes;
+
+        let file_path = PathBuf::from("E:\\").join("file");
+
+
+        std::fs::File::create(&file_path).unwrap();
+
+        let original_attr = get_attributes(&file_path).unwrap();
+
+        generic_test(|_| {
+
+
+
+            format!("
+
+    __set_attributes(pathtype.absolute({:?}), 1)
+
+    ", &file_path)
+        }, |_|{
+
+            assert_eq!(get_attributes(&file_path).unwrap(), 1);
+        }, |_|{
+
+            assert_eq!(get_attributes(&file_path).unwrap(), original_attr);
+
+        });
+
+    }
 
 
 

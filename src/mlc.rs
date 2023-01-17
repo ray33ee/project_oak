@@ -48,9 +48,22 @@ function _absolute (path)
     return res
 end
 
+function _special (special, path)
+    local res = {{}}
+    res.special = special
+    res.ident = \"s\"
+    res.path = path
+    return res
+end
+
 pathtype = {{}}
 pathtype.temp = _temp
 pathtype.absolute = _absolute
+pathtype.special = _special
+
+pathtype.AppData = \"APPDATA\"
+pathtype.ProgramFiles = \"PROGRAMFILES\"
+pathtype.HomePath = \"HOMEPATH\"
 
 _temp = null
 _absolute = null
@@ -86,12 +99,13 @@ ____io_open = io.open
 
 function _open (filename, mode)
     __file_open(filename, mode)
-    return ____io_open(filename.path, mode)
+    path = __get_abs_path(filename)
+    return ____io_open(path, mode)
 end
 
 io.open = _open
 
-_open = null
+--_open = null
 
 oak = {{}}
 oak.delete = __delete
@@ -114,6 +128,7 @@ oak.file_type = __file_type
 oak.exists = __exists
 oak.file_timestamps = __file_timestamps
 oak.get_registry_data = __get_registry_data
+--oak.set_attributes = __set_attributes
 
 
 {}
@@ -257,7 +272,7 @@ oak.get_registry_data = __get_registry_data
 
             globals.set("__file_open",
                         scope.create_function(|_, (path, mode): (PathType, String)| {
-                            crate::functions::file_open(uninstall, inverses, path, mode)?;
+                            crate::functions::file_open(uninstall, inverses, path, mode, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
@@ -265,6 +280,26 @@ oak.get_registry_data = __get_registry_data
             globals.set("__get_registry_data",
                         scope.create_function(|c, (root, key): (String, String)| {
                             crate::extra_functions::get_registry_data(c, &RootKey::from(root.as_str()), key)
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__get_abs_path",
+                        scope.create_function(|_, path: PathType| {
+                            Ok(path.to_absolute_path(temp).to_str().unwrap().to_string())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__create_symlink",
+                        scope.create_function(|_, (original, link): (PathType, PathType)| {
+                            crate::functions::create_symlink(inverses, &original, &link, temp)?;
+                            Ok(())
+                        }).unwrap()
+            ).unwrap();
+
+            globals.set("__set_attributes",
+                        scope.create_function(|_, (path, attr): (PathType, u32)| -> rlua::Result<()> {
+                            crate::functions::set_attributes(inverses, &path, attr, temp)?;
+                            Ok(())
                         }).unwrap()
             ).unwrap();
 
@@ -330,7 +365,12 @@ impl<'l> FromLua<'l> for PathType {
         let path: String = table.get("path")?;
 
         match ident.as_str() {
-            "t" => { Ok(PathType::Temporary(PathBuf::from(path))) },
+            "s" => {
+                let special: String = table.get("special")?;
+
+                Ok(PathType::Special(PathBuf::from(special), PathBuf::from(path)))
+            }
+             "t" => { Ok(PathType::Temporary(PathBuf::from(path))) },
             "a" => { Ok(PathType::Absolute(PathBuf::from(path))) },
             _ => {
                 Err(rlua::Error::FromLuaConversionError {

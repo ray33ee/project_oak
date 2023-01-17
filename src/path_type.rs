@@ -2,8 +2,10 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PathType {
+    Special(PathBuf, PathBuf),
     Absolute(PathBuf),
     Temporary(PathBuf),
 }
@@ -17,16 +19,20 @@ impl PathType {
             PathType::Temporary(path) => {
                 temp.path().join(path)
             }
+            PathType::Special(special, path) => {
+                let special = PathBuf::from(std::env::var(special.to_str().unwrap()).unwrap());
+                special.join(&path)
+            }
         }
 
 
     }
 
     pub fn is_temp(&self) -> bool {
-        if let PathType::Absolute(_) = self {
-            false
-        } else {
-            true
+        match &self {
+            PathType::Special(_, _) => {false}
+            PathType::Absolute(_) => {false}
+            PathType::Temporary(_) => {true}
         }
     }
 }

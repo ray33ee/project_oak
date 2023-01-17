@@ -4,7 +4,6 @@ Contains functions to assist installation, but do not change target computer sta
 and do not contribute to the uninstaller)
 
 Registry
-    - load: Loads the subkeys and values of the specified registry entry into a lua table
     - expand: expands environment variables
 
 Misc
@@ -108,4 +107,26 @@ pub fn get_registry_data<'l>(c: Context<'l>, root: &RootKey, key: String) -> Res
 
 
     Ok(table)
+}
+
+pub fn get_attributes(path: &Path) -> std::result::Result<u32, u32> {
+    use winapi::um::fileapi::GetFileAttributesA;
+    use winapi::um::errhandlingapi::GetLastError;
+
+    let abs_str = path.to_str().unwrap().as_bytes();
+
+    unsafe {
+        let pointer = abs_str.as_ptr() as *const i8;
+
+        let res = GetFileAttributesA(pointer);
+
+        if res == 4294967295 {
+
+
+            Err(GetLastError())
+        } else {
+            Ok(res)
+        }
+    }
+
 }

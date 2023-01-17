@@ -1,21 +1,23 @@
 # Todo
 
-- Figure out how to add the installer to the .data portion of executables
-  - Create two executables, differing only in .data size and compare
+- Define a struct that contains all the information needed to create an installer.
+  - Define a function to convert this struct into an installer
+  - Use serde to serialise it from json or xml form
+
 - Add flags to any commands with multiplicity (see NSIS commands)
-- Implement 'create shortcut'
-- Add function to change file attributes
-- Add extra functions
-- Add special windows variables (%appdata%, %programfiles%, etc.)
+
+- Add higher functions
+  - install and uninstall functions to oak script (to install and uninstall 3rd party)
+  - Add function that adds an uninstaller entry to HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall
+  - Function to check to see if already installed
+  - Add reg_append/remove_multi_key function that adds/removes a line from a multiline value
+  - Add shortcut to desktop/start menu/taskbar, etc.
+
 - Add a bunch of tests (use a tempdir for this, and create files filled with garbage)
   - Test the following:
-    - More complex iunstallers
-    - Convert code to string and back again, compare code or strings to test compiler
-- Add high level install and uninstall functions to oak script (to install and uninstall 3rd party)
-- Function to check to see if already installed
-- Add function that adds an uninstaller entry to HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall
-- Add reg_append/remove_multi_key function that adds/removes a line from a multiline value 
-- Add some path-specific functions (the inverses remove the added path, instead of saving the original path value)
-- Create a third path type, one that (like Temporary) does not create inverses. 
-  - Change is_temp() function to needs_inverse() function
+    - More complex uninstallers
+- Figure out how to add the installer to the .data portion of executables
+  - Create two executables, differing only in .data size and compare
 
+- Add some path-specific functions (the inverses remove the added path, instead of saving the original path value)
+  - Dafuq does this mean?
