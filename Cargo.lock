@@ -618,8 +618,9 @@ dependencies = [
 
 [[package]]
 name = "project_oak"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
+ "byteorder",
  "clap",
  "fs_extra",
  "lazy_static",

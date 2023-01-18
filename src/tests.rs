@@ -5,7 +5,7 @@ mod tests {
     use registry::{Hive, Security};
     use tempfile::TempDir;
     use crate::hlc;
-    use crate::oak::UninstallLocation;
+    use crate::oak::{Info, UninstallLocation};
 
     fn generic_test<S, I, U>(mut source_function: S, mut installer_validator: I, mut uninstaller_validator: U)
     where
@@ -28,9 +28,10 @@ mod tests {
 
         let installer_path = working_path.join("installer");
 
-        hlc::create_installer(source_path.as_path(), installer_path.as_path(), UninstallLocation::CommandLine).unwrap();
-
         let uninstaller_path = working_path.join("uninstaller");
+
+        hlc::create_installer(&std::fs::read_to_string(source_path.as_path()).unwrap(), installer_path.as_path(), Info::default().set_uninstaller_location(UninstallLocation::Path(uninstaller_path.clone()))).unwrap();
+
 
         if !hlc::install(installer_path.as_path(), uninstaller_path.as_path()) {
 
@@ -978,8 +979,14 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
 
         use crate::extra_functions::get_attributes;
 
-        let file_path = PathBuf::from("E:\\").join("file");
 
+        let temp = TempDir::new().unwrap();
+        let file_path = PathBuf::from("E:\\").join("project_oak_test_file");
+
+        if file_path.exists() {
+
+            std::fs::remove_file(&file_path).unwrap();
+        }
 
         std::fs::File::create(&file_path).unwrap();
 
@@ -1002,6 +1009,8 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
             assert_eq!(get_attributes(&file_path).unwrap(), original_attr);
 
         });
+
+        std::fs::remove_file(&file_path).unwrap();
 
     }
 

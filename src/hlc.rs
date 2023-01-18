@@ -6,7 +6,7 @@ use crate::oak::{Info, OakRead, OakWrite, OakType, UninstallLocation};
 use crate::path_type::Inverse;
 
 
-pub fn execute<P: AsRef<Path>>(archive: P, uninstaller: Option<P>) -> bool {
+pub fn execute<P: AsRef<Path>>(archive: P) -> bool {
 
     //Open the archive
     let info = {
@@ -22,9 +22,6 @@ pub fn execute<P: AsRef<Path>>(archive: P, uninstaller: Option<P>) -> bool {
             }
             UninstallLocation::InstallationDirectory => {
                 todo!()
-            }
-            UninstallLocation::CommandLine => {
-                Some(PathBuf::from(uninstaller.unwrap().as_ref()))
             }
             UninstallLocation::Null => {
                 None
@@ -45,17 +42,17 @@ pub fn execute<P: AsRef<Path>>(archive: P, uninstaller: Option<P>) -> bool {
 }
 
 // Really simple language for oak
-pub fn create_installer<P: AsRef<Path>>(_source_file: P, _installer_path: P, uninstaller_location: UninstallLocation) -> Result<()> {
+pub fn create_installer(_source: &str, _installer_path: &Path, info: &Info) -> Result<()> {
 
     lazy_static! {
         static ref RE: regex::Regex = regex::Regex::new("([\\s]+)data[\\s]+p\"([^\"]+)\"[\\s]*").unwrap();
     }
 
-    let original_source = std::fs::read_to_string(_source_file).unwrap();
+    let original_source = _source;
 
-    let oak_writer = OakWrite::new(_installer_path.as_ref());
+    let oak_writer = OakWrite::new(_installer_path);
 
-    oak_writer.info(Info::default().set_uninstaller_location(uninstaller_location));
+    oak_writer.info(info);
 
     //Loop over all data commands, add each file (named as an argument to the data command)
     //replace with argument with the name (returned when a file is added to the archive)

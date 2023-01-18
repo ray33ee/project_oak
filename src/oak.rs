@@ -26,7 +26,9 @@ pub enum UninstallLocation {
     InstallationDirectory,
 
     ///For now this is the only supported mode, and just accepts the uninstaller path from the command line
-    CommandLine,
+    //CommandLine,
+
+    ///
 
     ///Use this enum if the archive is itself an uninstaller
     Null,
@@ -52,7 +54,7 @@ impl Default for Info {
     fn default() -> Self {
         Self {
             oak_type: OakType::Installer,
-            u_location: UninstallLocation::CommandLine,
+            u_location: UninstallLocation::Path(PathBuf::from("Sample path")),
             reboot: false,
             elevated: false,
         }
