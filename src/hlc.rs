@@ -2,6 +2,8 @@ use crate::error::Result;
 use std::fs::OpenOptions;
 use clap::lazy_static::lazy_static;
 use std::path::{Path, PathBuf};
+use tempfile::TempDir;
+use crate::exe_extender::{extend_exe, get_meta};
 use crate::oak::{Info, OakRead, OakWrite, OakType, UninstallLocation};
 use crate::path_type::Inverse;
 
@@ -14,6 +16,9 @@ pub fn execute<P: AsRef<Path>>(archive: P) -> bool {
 
         a.info().unwrap()
     };
+
+    let tmpdir = TempDir::new().unwrap();
+    let tmp_un = tmpdir.path().join("uninstaller");
 
     let uninstaller = {
         match info.u_location {
@@ -29,15 +34,30 @@ pub fn execute<P: AsRef<Path>>(archive: P) -> bool {
         }
     };
 
+    println!("path {:?}", uninstaller);
+
     //Get the OakType field of the _info data
     match info.oak_type {
         OakType::Installer => {
-            _install(archive, uninstaller)
+            let result = _install(archive, Some(tmp_un.as_path()));
+
+            if !result {
+                let (_, length) = get_meta();
+
+
+                println!("Here");
+
+                extend_exe(tmp_un.as_path(), uninstaller.unwrap().as_path(), length);
+            }
+
+            result
         }
         OakType::Uninstaller => {
             _install::<P, PathBuf>(archive, None)
         }
     }
+
+
 
 }
 

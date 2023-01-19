@@ -9,12 +9,12 @@ extern crate registry;
 extern crate core;
 
 use std::fs::OpenOptions;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Write};
 use std::path::{Path, PathBuf};
 use clap::Arg;
 use tempfile::TempDir;
 use oak::{OakRead, OakWrite};
-use crate::oak::{Info, UninstallLocation};
+use crate::oak::{Info};
 use crate::source::Source;
 
 mod error;
@@ -28,6 +28,7 @@ mod path_type;
 mod extra_functions;
 mod higher_functions;
 mod source;
+mod exe_extender;
 
 pub fn append_archive_to_exe(archive_path: &Path, new_exe: &Path) {
 
@@ -167,21 +168,7 @@ fn main() {
                 panic!("No installer or uninstaller found")
             }*/
 
-            let exe_path = std::env::current_exe().unwrap();
-
-            let (offset, length) = {
-                let mut fh = OpenOptions::new().read(true).open(&exe_path).unwrap();
-
-                let length = fh.metadata().unwrap().len();
-
-                fh.seek(SeekFrom::End(-8)).unwrap();
-
-                let mut v = [0u8; 8];
-
-                fh.read_exact(& mut v).unwrap();
-
-                (u64::from_be_bytes(v), length)
-            };
+            let (offset, length) = exe_extender::get_meta();
 
             if offset == 0 {
                 //If the offset is zero, the exe contains no archive. This means it can only be used in 'create_installer' mode
@@ -196,8 +183,7 @@ fn main() {
 
                 complete.create_installer(tmp_file.as_path());
 
-
-                append_archive_to_exe(tmp_file.as_path(), PathBuf::from(".\\install.exe").as_path());
+                exe_extender::extend_exe(tmp_file.as_path(), PathBuf::from(".\\install.exe").as_path(), length);
 
 
 
@@ -208,13 +194,7 @@ fn main() {
 
                 let tmp_file = tmp.path().join("archive");
 
-                let mut exe = std::fs::OpenOptions::new().read(true).open(exe_path.as_path()).unwrap();
-                exe.seek(SeekFrom::Start(offset)).unwrap();
-                let mut t = exe.take(length - offset - 8);
-
-                {let mut archive = OpenOptions::new().create(true).write(true).open(tmp_file.as_path()).unwrap();
-
-                std::io::copy(& mut t, & mut archive).unwrap();}
+                exe_extender::get_archive(tmp_file.as_path(), length, offset);
 
                 hlc::execute(tmp_file.as_path());
 

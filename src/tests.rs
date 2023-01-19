@@ -80,17 +80,17 @@ mod tests {
 
         let installer_path = working_path.join("installer");
 
-        hlc::create_installer(source_path.as_path(), installer_path.as_path(), UninstallLocation::CommandLine).unwrap();
-
         let uninstaller_path = working_path.join("uninstaller");
 
-        if !hlc::execute(installer_path.as_path(), Some(uninstaller_path.as_path())) {
+        hlc::create_installer(&std::fs::read_to_string(source_path.as_path()).unwrap(), installer_path.as_path(), Info::default().set_uninstaller_location(UninstallLocation::Path(uninstaller_path.clone()))).unwrap();
+
+        if !hlc::install(installer_path.as_path(), uninstaller_path.as_path()) {
 
             //Closure to perform installer tests
 
             assert!(!working_path.join("sample").exists());
 
-            hlc::execute(uninstaller_path.as_path(), None);
+            hlc::uninstall(uninstaller_path.as_path());
 
             //Closure to perform uninstaller tests
             assert!(working_path.join("sample").exists());
