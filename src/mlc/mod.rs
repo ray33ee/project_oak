@@ -1,3 +1,8 @@
+mod functions;
+mod extra_functions;
+mod higher_functions;
+mod registry_ex;
+
 use std::path::{PathBuf};
 use std::sync::Arc;
 use crate::{OakRead, OakWrite};
@@ -6,7 +11,7 @@ use crate::path_type::{Inverse, PathType};
 
 use rlua::{Context, FromLua, Lua, Table, ToLua, Value};
 use rlua::prelude::{LuaError};
-use crate::registry_ex::{Data, RootKey};
+use crate::mlc::registry_ex::{Data, RootKey};
 
 use crate::error::{Error};
 
@@ -128,7 +133,7 @@ oak.file_type = __file_type
 oak.exists = __exists
 oak.file_timestamps = __file_timestamps
 oak.get_registry_data = __get_registry_data
---oak.set_attributes = __set_attributes
+oak.set_attributes = __set_attributes
 
 
 {}
@@ -139,32 +144,34 @@ oak.get_registry_data = __get_registry_data
     lua.context(|ctx| {
         ctx.scope(|scope| {
 
+
+
             let globals = ctx.globals();
 
             globals.set("__delete",
                         scope.create_function(|_, path: PathType| {
-                            crate::functions::delete( uninstall, inverses.clone(), &path, temp)?;
+                            functions::delete( uninstall, inverses.clone(), &path, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__move",
                         scope.create_function(|_, (source, destination): (PathType, PathType)| {
-                            crate::functions::_move(inverses, &source, &destination, temp)?;
+                            functions::_move(inverses, &source, &destination, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__rename",
                         scope.create_function(|_, (source, destination): (PathType, PathType)| {
-                            crate::functions::_move(inverses, &source, &destination, temp)?;
+                            functions::_move(inverses, &source, &destination, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__data",
                         scope.create_function(|_, (name, destination): (String, PathType)| {
-                            crate::functions::data(install, inverses, &name, &destination, temp)?;
+                            functions::data(install, inverses, &name, &destination, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
@@ -178,108 +185,108 @@ oak.get_registry_data = __get_registry_data
 
             globals.set("__mkdir",
                         scope.create_function(|_, path: PathType| {
-                            crate::functions::mkdir( inverses, path, temp)?;
+                            functions::mkdir( inverses, path, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__copy",
                         scope.create_function(|_, (source, destination): (PathType, PathType)| {
-                            crate::functions::copy(inverses, &source, &destination, temp)?;
+                            functions::copy(inverses, &source, &destination, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__zip",
                         scope.create_function(|_, (archive, folder): (PathType, PathType)| {
-                            crate::functions::zip(inverses, &archive, &folder, temp)?;
+                            functions::zip(inverses, &archive, &folder, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__unzip",
                         scope.create_function(|_, (archive, folder): (PathType, PathType)| {
-                            crate::functions::unzip(inverses, &archive, &folder, temp)?;
+                            functions::unzip(inverses, &archive, &folder, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__download",
                         scope.create_function(|_, (url, destination): (String, PathType)| -> rlua::Result<String> {
-                            let f = crate::functions::download(inverses, &url, &destination, temp)?;
+                            let f = functions::download(inverses, &url, &destination, temp)?;
                             Ok(f)
                         }).unwrap()
             ).unwrap();
 
             globals.set("__edit",
                         scope.create_function(|_, (path, reg): (PathType, String)| {
-                            crate::functions::edit(uninstall, inverses, &path, &reg, temp)?;
+                            functions::edit(uninstall, inverses, &path, &reg, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__reg_write_key",
                         scope.create_function(|_, (root, key): (RootKey, String)| {
-                            crate::functions::write_reg_key( inverses, &root, &key)?;
+                            functions::write_reg_key( inverses, &root, &key)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__reg_delete_key",
                         scope.create_function(|_, (root, key): (RootKey, String)| {
-                            crate::functions::delete_reg_key( inverses, &root, &key)?;
+                            functions::delete_reg_key( inverses, &root, &key)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__reg_write_value",
                         scope.create_function(|_, (root, key, value, data): (RootKey, String, String, Data)| {
-                            crate::functions::write_reg_value( inverses, &root, &key, &value, &registry::Data::from(&data))?;
+                            functions::write_reg_value( inverses, &root, &key, &value, &registry::Data::from(&data))?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__reg_delete_value",
                         scope.create_function(|_, (root, key, value): (RootKey, String, String)| {
-                            crate::functions::delete_reg_value( inverses, &root, &key, &value)?;
+                            functions::delete_reg_value( inverses, &root, &key, &value)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__directory_contents",
                         scope.create_function(|_, path: String| {
-                            crate::extra_functions::directory_contents(&PathBuf::from(path))
+                            extra_functions::directory_contents(&PathBuf::from(path))
                         }).unwrap()
             ).unwrap();
 
             globals.set("__file_type",
                         scope.create_function(|_, path: String| {
-                            crate::extra_functions::file_type(&PathBuf::from(path))
+                            extra_functions::file_type(&PathBuf::from(path))
                         }).unwrap()
             ).unwrap();
 
             globals.set("__exists",
                         scope.create_function(|_, path: String| {
-                            crate::extra_functions::exists(&PathBuf::from(path))
+                            extra_functions::exists(&PathBuf::from(path))
                         }).unwrap()
             ).unwrap();
 
             globals.set("__file_timestamps",
                         scope.create_function(|_, path: String| {
-                            crate::extra_functions::file_timestamps(&PathBuf::from(path))
+                            extra_functions::file_timestamps(&PathBuf::from(path))
                         }).unwrap()
             ).unwrap();
 
             globals.set("__file_open",
                         scope.create_function(|_, (path, mode): (PathType, String)| {
-                            crate::functions::file_open(uninstall, inverses, path, mode, temp)?;
+                            functions::file_open(uninstall, inverses, path, mode, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__get_registry_data",
                         scope.create_function(|c, (root, key): (String, String)| {
-                            crate::extra_functions::get_registry_data(c, &RootKey::from(root.as_str()), key)
+                            extra_functions::get_registry_data(c, &RootKey::from(root.as_str()), key)
                         }).unwrap()
             ).unwrap();
 
@@ -291,14 +298,14 @@ oak.get_registry_data = __get_registry_data
 
             globals.set("__create_symlink",
                         scope.create_function(|_, (original, link): (PathType, PathType)| {
-                            crate::functions::create_symlink(inverses, &original, &link, temp)?;
+                            functions::create_symlink(inverses, &original, &link, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();
 
             globals.set("__set_attributes",
                         scope.create_function(|_, (path, attr): (PathType, u32)| -> rlua::Result<()> {
-                            crate::functions::set_attributes(inverses, &path, attr, temp)?;
+                            functions::set_attributes(inverses, &path, attr, temp)?;
                             Ok(())
                         }).unwrap()
             ).unwrap();

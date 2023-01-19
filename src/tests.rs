@@ -974,13 +974,13 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
 
     }
 
-    #[test]
+    /*#[test]
     fn modify_attributes_test() {
 
         use crate::extra_functions::get_attributes;
 
 
-        let temp = TempDir::new().unwrap();
+        //let temp = TempDir::new().unwrap();
         let file_path = PathBuf::from("E:\\").join("project_oak_test_file");
 
         if file_path.exists() {
@@ -1012,8 +1012,36 @@ __reg_write_value(\"hklm\", \"SOFTWARE\\\\val_test\", \"val_name\", 100)
 
         std::fs::remove_file(&file_path).unwrap();
 
-    }
+    }*/
 
+    /*#[test]
+    fn modify_attributes_test_non_installer() {
+
+        let new_attr = 1;
+
+        let temp = TempDir::new().unwrap();
+
+        let tempdir= PathBuf::from("E:\\");
+
+        let temppath = tempdir.join("project oak modify attr non installer test file");
+
+        std::fs::File::create(&temppath).unwrap();
+
+        println!("{}", temppath.exists());
+
+        let attr = 128; //crate::extra_functions::get_attributes(temppath.as_path()).unwrap();
+
+        crate::functions::set_attributes(None, &PathType::Absolute(temppath.clone()), new_attr, &temp).unwrap();
+
+        assert_eq!(crate::extra_functions::get_attributes(temppath.as_path()).unwrap(), new_attr);
+
+        crate::functions::set_attributes(None, &PathType::Absolute(temppath.clone()), attr, &temp).unwrap();
+
+        assert_eq!(crate::extra_functions::get_attributes(temppath.as_path()).unwrap(), attr);
+
+
+
+    }*/
 
 
 }

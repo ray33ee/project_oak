@@ -23,7 +23,7 @@ impl Source {
     pub fn load_from_path(path: &Path) -> Self {
         let file = OpenOptions::new().read(true).open(path).unwrap();
 
-        serde_json::from_reader(file).unwrap()
+        serde_xml_rs::from_reader(file).unwrap()
     }
 
 }

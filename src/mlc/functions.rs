@@ -2,11 +2,10 @@ use std::path::{Path, PathBuf};
 use std::str::from_utf8_unchecked;
 use registry::Security;
 use tempfile::TempDir;
-use crate::{OakRead, OakWrite};
-use crate::registry_ex::{Data, RootKey};
+use crate::{error, OakRead, OakWrite};
+use crate::mlc::registry_ex::{Data, RootKey};
 use crate::path_type::{Inverse, PathType};
 use crate::error::{Error, Result};
-use crate::mlc::data_to_code;
 
 pub fn data(installer: & OakRead, inverses: Option<& Inverse>, name: & str, destination: &PathType, temp: & TempDir) -> Result<()>  {
 
@@ -234,23 +233,33 @@ pub fn set_attributes(inverses: Option<& Inverse>, path: &PathType, attributes: 
 
     let abs_path = path.to_absolute_path(temp);
 
-    let current_atts = crate::extra_functions::get_attributes(abs_path.as_path()).unwrap();
+    let current_atts = crate::mlc::extra_functions::get_attributes(abs_path.as_path()).unwrap();
 
     let abs_str = abs_path.to_str().unwrap().as_bytes();
 
-    unsafe {
+    let success = unsafe {
         let pointer = abs_str.as_ptr() as *const i8;
 
-        SetFileAttributesA(pointer, attributes);
-    }
+        SetFileAttributesA(pointer, attributes)
+    };
 
-    if !path.is_temp() {
-        if let Some(list) = inverses {
-            list.insert(0, format!("__set_attributes(pathtype.absolute({:?}), {})", abs_path, current_atts));
+    let err = unsafe { winapi::um::errhandlingapi::GetLastError() };
+
+    if success != 0 {
+        if !path.is_temp() {
+            if let Some(list) = inverses {
+                list.insert(0, format!("__set_attributes(pathtype.absolute({:?}), {})", abs_path, current_atts));
+            }
         }
+
+        Ok(())
+    } else {
+
+        Err(error::Error::Win32API(format!("{}", err)))
     }
 
-    Ok(())
+
+
 }
 
 
@@ -470,7 +479,7 @@ pub fn write_reg_value(inverses: Option<& Inverse>, root: &RootKey, key: &str, v
 
             //todo!()
 
-            list.insert(0, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", root, key, value, data_to_code(&Data::from(old_value))));
+            list.insert(0, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", root, key, value, crate::mlc::data_to_code(&Data::from(old_value))));
         }
     }
 
@@ -499,7 +508,7 @@ pub fn delete_reg_value(inverses: Option<& Inverse>, root: &RootKey, key: &str, 
         //list.insert(4, (String::from("reg_write_value"), vec![]));
 
 
-        list.insert(0, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", root, key, value, data_to_code(&Data::from(old_value))));
+        list.insert(0, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", root, key, value, crate::mlc::data_to_code(&Data::from(old_value))));
 
     }
 
@@ -533,7 +542,7 @@ fn recursive_recover(
         //list.insert(*index + 3, (String::from("push"), vec![rootkey.clone()]));
         //list.insert(*index + 4, (String::from("reg_write_value"), vec![]));
 
-        list.insert(*index, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", rootkey, name, value.name().to_string().unwrap(), data_to_code(&Data::from(value.data().clone()))));
+        list.insert(*index, format!("__reg_write_value(\"{:?}\", {:?}, {:?}, {})", rootkey, name, value.name().to_string().unwrap(), crate::mlc::data_to_code(&Data::from(value.data().clone()))));
 
         *index = *index + 1;
 

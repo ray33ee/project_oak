@@ -1,6 +1,6 @@
 [package]
 name = "project_oak"
-version = "0.1.23"
+version = "0.1.24"
 edition = "2021"
 description = "Proof of concept for a action/inverse and step/command based installer and inferred uninstaller"
 
@@ -23,3 +23,4 @@ serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.91"
 winapi = "0.3.8"
 byteorder = "1.4.3"
+serde-xml-rs = "0.6.0"

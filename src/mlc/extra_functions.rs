@@ -16,7 +16,7 @@ use std::path::{Path};
 use std::time::SystemTime;
 use registry::Security;
 use rlua::{Context, Result, Value};
-use crate::registry_ex::{RootKey};
+use crate::mlc::registry_ex::{RootKey};
 
 pub fn directory_contents(path: &Path) -> Result<HashMap<String, Vec<String>>> {
     let mut map = HashMap::new();
@@ -98,7 +98,7 @@ pub fn get_registry_data<'l>(c: Context<'l>, root: &RootKey, key: String) -> Res
 
     for value in reg.values() {
         if let Ok(v) = value {
-            kv_pairs.insert(v.name().to_string_lossy(), crate::registry_ex::Data::from(v.data().clone()));
+            kv_pairs.insert(v.name().to_string_lossy(), crate::mlc::registry_ex::Data::from(v.data().clone()));
         }
     }
 

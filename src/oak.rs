@@ -73,7 +73,7 @@ impl Info {
         self
     }
 
-    pub fn set_reboot(& mut self, reboot: bool) -> & mut Self {
+    /*pub fn set_reboot(& mut self, reboot: bool) -> & mut Self {
         self.reboot = reboot;
         self
     }
@@ -81,7 +81,7 @@ impl Info {
     pub fn set_elavated(& mut self, elevated: bool) -> & mut Self {
         self.elevated = elevated;
         self
-    }
+    }*/
 
 }
 

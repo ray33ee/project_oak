@@ -34,8 +34,6 @@ pub fn execute<P: AsRef<Path>>(archive: P) -> bool {
         }
     };
 
-    println!("path {:?}", uninstaller);
-
     //Get the OakType field of the _info data
     match info.oak_type {
         OakType::Installer => {
@@ -43,9 +41,6 @@ pub fn execute<P: AsRef<Path>>(archive: P) -> bool {
 
             if !result {
                 let (_, length) = get_meta();
-
-
-                println!("Here");
 
                 extend_exe(tmp_un.as_path(), uninstaller.unwrap().as_path(), length);
             }
@@ -146,7 +141,7 @@ fn _install<P: AsRef<Path>, Q: AsRef<Path>>(installer: P, uninstaller: Option<Q>
         };
 
 
-        let res = crate::mlc::run(code.as_str(), & mut read,  write.as_ref(),  inverses.as_ref(), &temp);
+        let res = crate::mlc::run(code.as_str(), & mut read, write.as_ref(), inverses.as_ref(), &temp);
 
         if let Some(writer) = & mut write {
             let st = inverses.unwrap().combine();

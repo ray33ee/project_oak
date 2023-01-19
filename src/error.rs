@@ -16,6 +16,7 @@ pub enum Error {
     Registry(registry::Error),
     SedRegex(sedregex::ErrorKind),
     SerdeJson(serde_json::Error),
+    Win32API(String),
 }
 
 impl Display for Error {

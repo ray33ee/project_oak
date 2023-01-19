@@ -32,6 +32,8 @@ The majority of Lua functions work the same, but some are modified to conform to
 
 Since most modified functions can take either an absolute path or a temporary path, we expose helper functions `pathtype.absolute` and `pathtype.temp` that take a path as an argument.
 
+We also have the function `pathtype.special` which takes a special windows directory (like %appdata%) and appends a path onto it
+
 ### Deleted functions
 
 Some functions do not conform or are made redundant when used with Oak. These include
@@ -56,5 +58,43 @@ We support the following registry types:
 - `REG_MULTI_SZ` via an array of strings
 - `REG_QWORD` via helper function `registry.qword` which takes a number or integer as a u64
 - `REG_EXPAND_SZ` via helper function `registry.expanded` which takes a string
+
+We also have the following constants which can be used as root keys
+
+- HKLM
+- HKCC
+- HKCR
+- HKCU
+- HKU
+
+### Remaining functions
+
+- oak.delete
+- oak.move
+- oak.rename
+- oak.data
+- oak.mkdir
+- oak.copy
+- oak.zip
+- oak.unzip
+- oak.download
+- oak.edit
+- oak.reg_write_key
+- oak.reg_delete_key
+- oak.reg_write_value
+- oak.reg_delete_value
+
+- oak.directory_contents
+- oak.file_type
+- oak.exists
+- oak.file_timestamps
+- oak.get_registry_data
+- oak.set_attributes
+
+### Source files
+
+Source files are XML files that are serialised (via serde) into the `source::Source` struct which contains the source code
+as well as extra information used to create an installer. 
+
 
 

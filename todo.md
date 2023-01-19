@@ -1,6 +1,9 @@
 # Todo
 
-- Find out why `modify_attributes_test` test keeps failing
+- Sort out all the unwraps.
+- Display an error message to the user when a Lua script and when an installation fails
+
+- Find out why `extra_functions::get_attributes` keeps failing
 
 - Add flags to any commands with multiplicity (see NSIS commands)
 
@@ -16,3 +19,4 @@
     - More complex uninstallers
 
 - Add some environment variable PATH-specific functions (the inverses remove the added PATH, instead of saving the original PATH value)
+- Give functionality to `reboot` and `elavated` fields in `Info` struct
